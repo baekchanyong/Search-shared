@@ -35,9 +35,9 @@ with tab2:
 
     col_ma1, col_ma2 = st.columns(2)
     with col_ma1:
-        c5 = st.checkbox("5. (일봉) 60일선이 120일선보다 아래에 있는가? (장기 역배열)", value=all_c_group2)
+        c5 = st.checkbox("5. (일봉) 60일선이 120일선보다 아래에 있는가?", value=all_c_group2)
         c6 = st.checkbox("6. (일봉) 20일선이 60일선보다 아래에 있는가?", value=all_c_group2)
-        c7 = st.checkbox("7. (일봉) 5일선이 10일선 위에 있는가? (단기 정배열)", value=all_c_group2)
+        c7 = st.checkbox("7. (일봉) 5일선이 10일선 위에 있는가?", value=all_c_group2)
         c8 = st.checkbox("8. (일봉) 10일선이 20일선 위에 있는가?", value=all_c_group2)
     with col_ma2:
         c9 = st.checkbox("9. (일봉) 5일선이 상승 중이거나 평평한가?", value=all_c_group2)
@@ -62,21 +62,20 @@ with tab3:
 st.divider()
 
 # --- 4. 시장 설정 (수량 입력 제거됨) ---
-st.subheader("🌍 분석시장 선택 (전체 종목 스캔)")
+st.subheader("분석시장 선택")
 col_m1, col_m2, col_m3 = st.columns(3)
 
 with col_m1:
-    st.markdown("### 🇰🇷 KOSPI")
-    use_kospi = st.checkbox("KOSPI 전체 분석", value=True)
-
+    use_kospi = st.checkbox("🇰🇷 KOSPI 전체 분석", value=True)
+    st.caption("※ 예상시간 2분 (코스피 종목 약 950개 + ETF등 총 2000개)")
+    
 with col_m2:
-    st.markdown("### 🇰🇷 KOSDAQ")
-    use_kosdaq = st.checkbox("KOSDAQ 전체 분석", value=False)
+    use_kosdaq = st.checkbox("🇰🇷 KOSDAQ 전체 분석", value=False)
+    st.caption("※ 예상시간 2분 (코스닥 종목 약 1700개)")
 
 with col_m3:
-    st.markdown("### 🇺🇸 NASDAQ")
-    use_nasdaq = st.checkbox("NASDAQ 전체 분석", value=False)
-    st.caption("※ 나스닥 전체 선택 시 시간이 오래 걸릴 수 있습니다.")
+    use_nasdaq = st.checkbox("🇺🇸 NASDAQ 전체 분석", value=False)
+    st.caption("※ 예상시간 5분 (나스닥 종목 약 5000개)")
 
 # --- 5. 분석 로직 ---
 
@@ -91,7 +90,7 @@ def check_fundamental_kr(code):
             
         df_fin = pd.read_html(str(finance_html[0]))[0]
         df_fin.set_index(df_fin.columns[0], inplace=True)
-        
+         
         reserve = float(str(df_fin.loc['유보율'].dropna().iloc[-1]).replace(',', ''))
         debt = float(str(df_fin.loc['부채비율'].dropna().iloc[-1]).replace(',', ''))
         roe = float(str(df_fin.loc['ROE'].dropna().iloc[-1]).replace(',', ''))
