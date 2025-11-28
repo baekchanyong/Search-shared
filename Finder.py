@@ -67,19 +67,19 @@ col_m1, col_m2, col_m3 = st.columns(3)
 
 with col_m1:
     st.markdown("### 🇰🇷 KOSPI")
-    use_kospi = st.checkbox("KOSPI 포함", value=True)
+    use_kospi = st.checkbox("🇰🇷 KOSPI", value=True)
     kospi_all = st.checkbox("KOSPI 전체 검색", value=False, disabled=not use_kospi)
     kospi_limit = st.number_input("검색 수량", 10, 3000, 50, key="k_limit", disabled=not use_kospi or kospi_all)
 
 with col_m2:
     st.markdown("### 🇰🇷 KOSDAQ")
-    use_kosdaq = st.checkbox("KOSDAQ 포함", value=False)
+    use_kosdaq = st.checkbox("🇰🇷 KOSDAQ", value=False)
     kosdaq_all = st.checkbox("KOSDAQ 전체 검색", value=False, disabled=not use_kosdaq)
     kosdaq_limit = st.number_input("검색 수량", 10, 3000, 50, key="kq_limit", disabled=not use_kosdaq or kosdaq_all)
 
 with col_m3:
     st.markdown("### 🇺🇸 NASDAQ")
-    use_nasdaq = st.checkbox("NASDAQ 포함", value=False)
+    use_nasdaq = st.checkbox("🇺🇸 NASDAQ", value=False)
     nasdaq_all = st.checkbox("NASDAQ 전체 검색", value=False, disabled=not use_nasdaq)
     nasdaq_limit = st.number_input("검색 수량", 10, 5000, 50, key="n_limit", disabled=not use_nasdaq or nasdaq_all)
 
@@ -92,7 +92,7 @@ def check_fundamental_kr(code):
         soup = BeautifulSoup(response.text, 'html.parser')
         
         finance_html = soup.select('div.section.cop_analysis div.sub_section')
-        if not finance_html: return False, {}
+        if not finance_html: return Fal, {}
             
         df_fin = pd.read_html(str(finance_html[0]))[0]
         df_fin.set_index(df_fin.columns[0], inplace=True)
