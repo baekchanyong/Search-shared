@@ -14,7 +14,7 @@ st.title("📈 주식 검색기")
 
 # --- 2. 공지사항 ---
 with st.expander("📢 공지사항", expanded=True):
-    st.write("나스닥은 안되누ㅜ")
+    st.write("이것저것 테스트해보고 안되는거 얘기점")
 
 st.divider()
 
@@ -77,7 +77,7 @@ with col_m2:
 
 with col_m3:
     use_nasdaq = st.checkbox("🇺🇸 NASDAQ", value=False)
-    st.caption("※ 아직 제대로 작동안안함ㅠ")
+    st.caption("※ 좀 걸링..")
 
 # --- 5. 분석 로직 ---
 
@@ -230,9 +230,9 @@ st.divider()
 
 def get_target_msg():
     msgs = []
-    if use_kospi: msgs.append("KOSPI 전체")
-    if use_kosdaq: msgs.append("KOSDAQ 전체")
-    if use_nasdaq: msgs.append("NASDAQ 전체")
+    if use_kospi: msgs.append("KOSPI")
+    if use_kosdaq: msgs.append("KOSDAQ")
+    if use_nasdaq: msgs.append("NASDAQ")
     return ", ".join(msgs)
 
 if st.button("분석시작", type="primary", use_container_width=True):
