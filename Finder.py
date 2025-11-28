@@ -1,4 +1,3 @@
-
 import streamlit as st
 import FinanceDataReader as fdr
 import pandas as pd
@@ -62,29 +61,24 @@ with tab3:
 
 st.divider()
 
-# --- 4. 시장 및 수량 설정 ---
-st.subheader("분석시장 선택")
+# --- 4. 시장 설정 (수량 입력 제거됨) ---
+st.subheader("🌍 분석시장 선택 (전체 종목 스캔)")
 col_m1, col_m2, col_m3 = st.columns(3)
 
 with col_m1:
     st.markdown("### 🇰🇷 KOSPI")
-    use_kospi = st.checkbox("🇰🇷 KOSPI", value=True)
-    kospi_all = st.checkbox("KOSPI 전체 검색", value=False, disabled=not use_kospi)
-    kospi_limit = st.number_input("검색 수량", 10, 3000, 50, key="k_limit", disabled=not use_kospi or kospi_all)
+    use_kospi = st.checkbox("KOSPI 전체 분석", value=True)
 
 with col_m2:
     st.markdown("### 🇰🇷 KOSDAQ")
-    use_kosdaq = st.checkbox("🇰🇷 KOSDAQ", value=False)
-    kosdaq_all = st.checkbox("KOSDAQ 전체 검색", value=False, disabled=not use_kosdaq)
-    kosdaq_limit = st.number_input("검색 수량", 10, 3000, 50, key="kq_limit", disabled=not use_kosdaq or kosdaq_all)
+    use_kosdaq = st.checkbox("KOSDAQ 전체 분석", value=False)
 
 with col_m3:
     st.markdown("### 🇺🇸 NASDAQ")
-    use_nasdaq = st.checkbox("🇺🇸 NASDAQ", value=False)
-    nasdaq_all = st.checkbox("NASDAQ 전체 검색", value=False, disabled=not use_nasdaq)
-    nasdaq_limit = st.number_input("검색 수량", 10, 5000, 50, key="n_limit", disabled=not use_nasdaq or nasdaq_all)
+    use_nasdaq = st.checkbox("NASDAQ 전체 분석", value=False)
+    st.caption("※ 나스닥 전체 선택 시 시간이 오래 걸릴 수 있습니다.")
 
-# --- 5. ---
+# --- 5. 분석 로직 ---
 
 def check_fundamental_kr(code):
     try:
@@ -93,7 +87,7 @@ def check_fundamental_kr(code):
         soup = BeautifulSoup(response.text, 'html.parser')
         
         finance_html = soup.select('div.section.cop_analysis div.sub_section')
-        if not finance_html: return Fal, {}
+        if not finance_html: return False, {} # Fal 오타 수정됨
             
         df_fin = pd.read_html(str(finance_html[0]))[0]
         df_fin.set_index(df_fin.columns[0], inplace=True)
@@ -115,7 +109,7 @@ def analyze_stock(stock_info):
     code = stock_info['Code']
     name = stock_info['Name']
     market = stock_info['Market']
-    actual_rank = stock_info['Actual_Rank'] # 실제 시총 순위 받아오기
+    actual_rank = stock_info['Actual_Rank']
     marcap = stock_info.get('Marcap', 0)
 
     # [조건 1] 제외 종목 필터
@@ -187,7 +181,7 @@ def analyze_stock(stock_info):
          fin_info = {"유보율": "N/A", "부채비율": "N/A", "ROE": "N/A"}
 
     return {
-        '순위': actual_rank, # 실제 시총 순위 (화면 표시용)
+        '순위': actual_rank,
         '시장': market,
         '종목명': name,
         '코드': code,
@@ -202,52 +196,41 @@ st.divider()
 
 def get_target_msg():
     msgs = []
-    if use_kospi: msgs.append(f"코스피({'전체' if kospi_all else kospi_limit})")
-    if use_kosdaq: msgs.append(f"코스닥({'전체' if kosdaq_all else kosdaq_limit})")
-    if use_nasdaq: msgs.append(f"나스닥({'전체' if nasdaq_all else nasdaq_limit})")
+    if use_kospi: msgs.append("KOSPI 전체")
+    if use_kosdaq: msgs.append("KOSDAQ 전체")
+    if use_nasdaq: msgs.append("NASDAQ 전체")
     return ", ".join(msgs)
 
 if st.button("분석시작", type="primary", use_container_width=True):
     if not (use_kospi or use_kosdaq or use_nasdaq):
         st.error("시장을 하나 이상 선택해주세요.")
     else:
-        st.write(f"🔎 **{get_target_msg()}** 분석을 시작합니다... (선택된 조건만 검사)")
+        st.write(f"🔎 **{get_target_msg()}** 분석을 시작합니다... (종목 수가 많아 시간이 걸릴 수 있습니다)")
         
         progress_bar = st.progress(0)
         status_text = st.empty()
         
         all_targets = []
         try:
-            # 1. 데이터를 먼저 다 가져와서 '시총 순위'를 매깁니다.
+            # 1. 수량 제한 없이(.head() 제거) 전체 리스트 가져오기
             if use_kospi:
                 k = fdr.StockListing('KOSPI'); k['Market'] = 'KOSPI'
-                # Marcap이 없는 경우 대비 0 처리
                 if 'Marcap' not in k.columns: k['Marcap'] = 0
-                
-                # 전체를 가져와서 정렬 후 순위 매김
                 k = k.sort_values(by='Marcap', ascending=False)
-                k['Actual_Rank'] = range(1, len(k) + 1) # 실제 순위 부여
-                
-                if not kospi_all: k = k.head(kospi_limit) # 그 다음 자르기
+                k['Actual_Rank'] = range(1, len(k) + 1)
                 all_targets.append(k)
                 
             if use_kosdaq:
                 kq = fdr.StockListing('KOSDAQ'); kq['Market'] = 'KOSDAQ'
                 if 'Marcap' not in kq.columns: kq['Marcap'] = 0
-                
                 kq = kq.sort_values(by='Marcap', ascending=False)
                 kq['Actual_Rank'] = range(1, len(kq) + 1)
-                
-                if not kosdaq_all: kq = kq.head(kosdaq_limit)
                 all_targets.append(kq)
                 
             if use_nasdaq:
                 ns = fdr.StockListing('NASDAQ'); ns['Market'] = 'NASDAQ'
-                # 나스닥은 FDR 데이터에 시총이 보통 없음 (0으로 처리 후 임시 순위 부여)
                 if 'Marcap' not in ns.columns: ns['Marcap'] = 0
-                ns['Actual_Rank'] = range(1, len(ns) + 1) # 목록 순서대로 (나스닥은 알파벳순일수 있음)
-                
-                if not nasdaq_all: ns = ns.head(nasdaq_limit)
+                ns['Actual_Rank'] = range(1, len(ns) + 1)
                 all_targets.append(ns)
                 
         except Exception as e:
@@ -261,6 +244,8 @@ if st.button("분석시작", type="primary", use_container_width=True):
         final_df = pd.concat(all_targets).reset_index(drop=True)
         stock_list = final_df.to_dict('records')
         total_len = len(stock_list)
+        
+        st.write(f"📊 총 **{total_len}개** 종목을 스캔합니다.")
 
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
@@ -275,7 +260,7 @@ if st.button("분석시작", type="primary", use_container_width=True):
                 
                 cnt += 1
                 progress_bar.progress(cnt / total_len)
-                status_text.text(f"🏃 {cnt}/{total_len} 종목 분석 중...")
+                status_text.text(f"🏃 {cnt}/{total_len} 종목 분석 중... ({int((cnt/total_len)*100)}%)")
 
         progress_bar.empty()
         status_text.empty()
@@ -283,11 +268,7 @@ if st.button("분석시작", type="primary", use_container_width=True):
         if results:
             st.success(f"🎉 조건에 맞는 {len(results)}개 종목 발견!")
             
-            # 결과 표시 (이미 실제 순위가 '순위' 컬럼에 들어있음)
             res_df = pd.DataFrame(results)
-            
-            # 보기 좋게 정렬 (순위 오름차순: 1등부터 보이게)
-            # 만약 코스피, 코스닥을 섞어서 본다면 각각의 순위가 섞여서 보일 것입니다.
             res_df = res_df.sort_values(by=['시장', '순위'])
             
             tab_res1, tab_res2 = st.tabs(["📋 전체 결과", "📂 시장별 분류"])
@@ -299,4 +280,4 @@ if st.button("분석시작", type="primary", use_container_width=True):
                         st.write(f"**{mkt} ({len(sub)}개)**")
                         st.dataframe(sub, hide_index=True)
         else:
-            st.warning("조건을 만족하는 종목이 하나도 없습니다. 조건을 조금 더 풀어보세요.")
+            st.warning("조건을 만족하는 종목이 없습니다.")
