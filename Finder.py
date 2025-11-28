@@ -24,7 +24,7 @@ tab1, tab2, tab3 = st.tabs(["📊 차트/캔들", "📈 이동평균선", "💰 
 # [Tab 1] 캔들/패턴
 with tab1:
     all_c_group1 = st.checkbox("전체선택/해제", value=True, key="g1")
-    st.divider() # 구분선 추가    
+    
     c2 = st.checkbox("2. (월봉) 이번 달 캔들이 양봉(+) 상태인가?", value=all_c_group1)
     c3 = st.checkbox("3. (주봉) 이번 주 고가가 지난주 고가보다 높은가?", value=all_c_group1)
     c4 = st.checkbox("4. (주봉) 이번 주 저가가 지난주 저가보다 높은가?", value=all_c_group1)
@@ -32,7 +32,6 @@ with tab1:
 # [Tab 2] 이동평균선
 with tab2:
     all_c_group2 = st.checkbox("전체선택/해제", value=True, key="g2")
-    st.divider()
 
     col_ma1, col_ma2 = st.columns(2)
     with col_ma1:
@@ -48,14 +47,13 @@ with tab2:
 # [Tab 3] 재무/기타
 with tab3:
     all_c_group3 = st.checkbox("전체선택/해제", value=True, key="g3")
-    st.divider()
 
-    st.markdown("##### 종목 필터 및 수급")
+    st.markdown("종목 필터 및 수급")
     c1 = st.checkbox("1. 위험 종목 제외 (관리/환기/스팩/ETF/ETN/초저유동성 등)", value=all_c_group3)
     c12 = st.checkbox("12. (일봉) 최근 120봉 이내에 '설정된 금액' 이상 거래대금이 1회 이상 발생했는가?", value=all_c_group3)
     min_money = st.number_input("   └ 기준 거래대금 (단위: 억)", value=50, disabled=not c12)
     
-    st.markdown("##### 재무 건전성 (한국 주식 전용)")
+    st.markdown("재무 건전성 (한국 주식 전용)")
     st.caption("※ 나스닥은 재무 데이터 수집 제한으로 자동 통과됩니다.")
     c13 = st.checkbox("13. 유보율 500% 이상", value=all_c_group3)
     c14 = st.checkbox("14. 부채비율 150% 이하", value=all_c_group3)
