@@ -16,17 +16,15 @@ with st.expander("📢 공지사항", expanded=False):
 
 st.divider()
 
-# --- 3. 검색 조건 설정 (상세 설명 & 전체 선택 적용) ---
+# --- 3. 검색 조건 설정 ---
 st.subheader("🛠 검색 조건 설정")
 
-# 탭 구성
-tab1, tab2, tab3 = st.tabs(["📊 차트/캔들 조건", "📈 이동평균선 조건", "💰 재무/기타 조건"])
+tab1, tab2, tab3 = st.tabs(["📊 차트/캔들", "📈 이동평균선", "💰 재무/기타"])
 
 # [Tab 1] 캔들/패턴
 with tab1:
-    # 그룹 전체 제어
-    all_c_group1 = st.checkbox("✅ 캔들 조건 전체 선택/해제", value=True, key="g1")
-    st.markdown("---")
+    all_c_group1 = st.checkbox("전체선택/해제", value=True, key="g1")
+    st.divider() # 구분선 추가
     
     c2 = st.checkbox("2. (월봉) 이번 달 캔들이 양봉(+) 상태인가? (전달 종가보다 상승 중)", value=all_c_group1)
     c3 = st.checkbox("3. (주봉) 이번 주 고가가 지난주 고가보다 높은가?", value=all_c_group1)
@@ -34,26 +32,26 @@ with tab1:
 
 # [Tab 2] 이동평균선
 with tab2:
-    all_c_group2 = st.checkbox("✅ 이동평균선 조건 전체 선택/해제", value=True, key="g2")
-    st.markdown("---")
+    all_c_group2 = st.checkbox("전체선택/해제", value=True, key="g2")
+    st.divider()
 
     col_ma1, col_ma2 = st.columns(2)
     with col_ma1:
-        st.markdown("##### 이평선 정배열 조건")
+        st.markdown("##### 정배열 조건") # 텍스트 간소화
         c5 = st.checkbox("5. (일봉) 60일선이 120일선보다 아래에 있는가? (장기 역배열)", value=all_c_group2)
         c6 = st.checkbox("6. (일봉) 20일선이 60일선보다 아래에 있는가?", value=all_c_group2)
         c7 = st.checkbox("7. (일봉) 5일선이 10일선 위에 있는가? (단기 정배열)", value=all_c_group2)
         c8 = st.checkbox("8. (일봉) 10일선이 20일선 위에 있는가?", value=all_c_group2)
     with col_ma2:
-        st.markdown("##### 이평선 추세(기울기) 조건")
+        st.markdown("##### 추세 조건") # '기울기조건' 텍스트 제거 및 대체
         c9 = st.checkbox("9. (일봉) 5일선이 상승 중이거나 평평한가?", value=all_c_group2)
         c10 = st.checkbox("10. (일봉) 10일선이 상승 중인가?", value=all_c_group2)
         c11 = st.checkbox("11. (일봉) 20일선이 상승 중인가?", value=all_c_group2)
 
 # [Tab 3] 재무/기타
 with tab3:
-    all_c_group3 = st.checkbox("✅ 재무 및 기타 조건 전체 선택/해제", value=True, key="g3")
-    st.markdown("---")
+    all_c_group3 = st.checkbox("전체선택/해제", value=True, key="g3")
+    st.divider()
 
     st.markdown("##### 종목 필터 및 수급")
     c1 = st.checkbox("1. 위험 종목 제외 (관리/환기/스팩/ETF/ETN/초저유동성 등)", value=all_c_group3)
@@ -121,10 +119,8 @@ def analyze_stock(stock_info):
     code = stock_info['Code']
     name = stock_info['Name']
     market = stock_info['Market']
-    
-    # 시가총액 정보 가져오기 (정렬용)
-    # 한국 주식은 'Marcap' 컬럼이 있고, 미국은 보통 없어서 처리 필요
-    marcap = stock_info.get('Marcap', 0) 
+    actual_rank = stock_info['Actual_Rank'] # 실제 시총 순위 받아오기
+    marcap = stock_info.get('Marcap', 0)
 
     # [조건 1] 제외 종목 필터
     if c1 and market in ['KOSPI', 'KOSDAQ']:
@@ -195,12 +191,12 @@ def analyze_stock(stock_info):
          fin_info = {"유보율": "N/A", "부채비율": "N/A", "ROE": "N/A"}
 
     return {
+        '순위': actual_rank, # 실제 시총 순위 (화면 표시용)
         '시장': market,
         '종목명': name,
         '코드': code,
         '현재가': f"{curr_day['Close']:,.2f}" if market == 'NASDAQ' else f"{int(curr_day['Close']):,}원",
         '등락률': f"{round(curr_day['Change']*100, 2)}%",
-        '시가총액_raw': marcap, # 정렬을 위한 원본 데이터 (화면엔 안보여줌)
         '시가총액': f"{int(marcap / 100000000):,}억" if market != 'NASDAQ' else "정보없음",
         **fin_info
     }
@@ -226,20 +222,38 @@ if st.button("분석시작", type="primary", use_container_width=True):
         
         all_targets = []
         try:
+            # 1. 데이터를 먼저 다 가져와서 '시총 순위'를 매깁니다.
             if use_kospi:
                 k = fdr.StockListing('KOSPI'); k['Market'] = 'KOSPI'
-                if not kospi_all: k = k.head(kospi_limit)
+                # Marcap이 없는 경우 대비 0 처리
+                if 'Marcap' not in k.columns: k['Marcap'] = 0
+                
+                # 전체를 가져와서 정렬 후 순위 매김
+                k = k.sort_values(by='Marcap', ascending=False)
+                k['Actual_Rank'] = range(1, len(k) + 1) # 실제 순위 부여
+                
+                if not kospi_all: k = k.head(kospi_limit) # 그 다음 자르기
                 all_targets.append(k)
+                
             if use_kosdaq:
                 kq = fdr.StockListing('KOSDAQ'); kq['Market'] = 'KOSDAQ'
+                if 'Marcap' not in kq.columns: kq['Marcap'] = 0
+                
+                kq = kq.sort_values(by='Marcap', ascending=False)
+                kq['Actual_Rank'] = range(1, len(kq) + 1)
+                
                 if not kosdaq_all: kq = kq.head(kosdaq_limit)
                 all_targets.append(kq)
+                
             if use_nasdaq:
                 ns = fdr.StockListing('NASDAQ'); ns['Market'] = 'NASDAQ'
-                # 나스닥은 FDR 리스팅에 시가총액 정보가 없을 수 있음
-                if 'Marcap' not in ns.columns: ns['Marcap'] = 0 
+                # 나스닥은 FDR 데이터에 시총이 보통 없음 (0으로 처리 후 임시 순위 부여)
+                if 'Marcap' not in ns.columns: ns['Marcap'] = 0
+                ns['Actual_Rank'] = range(1, len(ns) + 1) # 목록 순서대로 (나스닥은 알파벳순일수 있음)
+                
                 if not nasdaq_all: ns = ns.head(nasdaq_limit)
                 all_targets.append(ns)
+                
         except Exception as e:
             st.error(f"종목 리스트 확보 실패: {e}")
             st.stop()
@@ -273,21 +287,20 @@ if st.button("분석시작", type="primary", use_container_width=True):
         if results:
             st.success(f"🎉 조건에 맞는 {len(results)}개 종목 발견!")
             
-            # [핵심] 시가총액 순으로 정렬하기
+            # 결과 표시 (이미 실제 순위가 '순위' 컬럼에 들어있음)
             res_df = pd.DataFrame(results)
             
-            # 시가총액_raw 기준으로 내림차순(큰 순서) 정렬
-            res_df = res_df.sort_values(by='시가총액_raw', ascending=False)
+            # 보기 좋게 정렬 (순위 오름차순: 1등부터 보이게)
+            # 만약 코스피, 코스닥을 섞어서 본다면 각각의 순위가 섞여서 보일 것입니다.
+            res_df = res_df.sort_values(by=['시장', '순위'])
             
-            # 순위 컬럼 만들기 (1위, 2위...)
-            res_df.insert(0, '순위', range(1, len(res_df) + 1))
-            
-            # 화면 표시용 컬럼 정리 (raw 데이터는 숨김)
-            display_cols = [col for col in res_df.columns if col != '시가총액_raw']
-            display_df = res_df[display_cols]
-
-            # 인덱스를 숨기고 깔끔하게 표시
-            st.dataframe(display_df, hide_index=True)
-            
+            tab_res1, tab_res2 = st.tabs(["📋 전체 결과", "📂 시장별 분류"])
+            with tab_res1: st.dataframe(res_df, hide_index=True)
+            with tab_res2:
+                for mkt in ['KOSPI', 'KOSDAQ', 'NASDAQ']:
+                    sub = res_df[res_df['시장'] == mkt]
+                    if not sub.empty:
+                        st.write(f"**{mkt} ({len(sub)}개)**")
+                        st.dataframe(sub, hide_index=True)
         else:
             st.warning("조건을 만족하는 종목이 하나도 없습니다. 조건을 조금 더 풀어보세요.")
