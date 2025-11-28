@@ -76,7 +76,7 @@ with col_m2:
 
 with col_m3:
     use_nasdaq = st.checkbox("🇺🇸 NASDAQ", value=False)
-    st.caption("※ 예상시간 8분")
+    st.caption("※ 아직 제대로 작동안안함ㅠ")
 
 # --- 5. 분석 로직 ---
 
