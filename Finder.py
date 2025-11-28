@@ -67,7 +67,7 @@ col_m1, col_m2, col_m3 = st.columns(3)
 
 with col_m1:
     use_kospi = st.checkbox("🇰🇷 KOSPI", value=True)
-    st.caption("※ 예상시간 약 1분 30초")
+    st.caption("※ 예상시간 1분 30초")
     
 with col_m2:
     use_kosdaq = st.checkbox("🇰🇷 KOSDAQ", value=False)
