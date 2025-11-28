@@ -7,75 +7,82 @@ from datetime import datetime, timedelta
 import concurrent.futures
 
 # --- 1. 페이지 설정 ---
-st.set_page_config(page_title="글로벌 주식 검색기", layout="wide")
+st.set_page_config(page_title="주식 검색기", layout="wide")
 
-st.title("🌏 글로벌 주식 검색기 (KR & US)")
+st.title("📈 주식 검색기")
 
 # --- 2. 공지사항 ---
-with st.expander("📢 검색 조건 확인하기 (한국/미국 적용 차이)", expanded=False):
-    st.markdown("""
-    **✅ 공통 적용 조건 (차트 기술적 분석)**
-    1. **(월봉)** 현재 캔들이 양봉(+)일 것
-    2. **(주봉)** 현재 고가가 직전 봉 고가보다 높을 것
-    3. **(주봉)** 현재 저가가 직전 봉 저가보다 높을 것
-    4. **(일봉)** 60일 이평선 <= 120일 이평선
-    5. **(일봉)** 20일 이평선 <= 60일 이평선
-    6. **(일봉)** 5일 이평선 >= 10일 이평선
-    7. **(일봉)** 10일 이평선 >= 20일 이평선
-    8. **(일봉)** 5일 이평선 상승 또는 보합
-    9. **(일봉)** 10일 이평선 상승
-    10. **(일봉)** 20일 이평선 상승
-    11. **(거래대금)** 120일 이내에 50억(KRW) 이상 거래 터진 날이 1회 이상 있을 것 
-       *(미국 주식은 환율 1400원 가정하여 약 3.5M 달러로 계산)*
-
-    **✅ 한국 주식(KOSPI, KOSDAQ) 전용 조건**
-    12. **제외 대상:** 관리/환기/주의, 스팩, ETF, ETN, 우선주, 홀딩스
-    13. **(재무)** 유보율 500% 이상
-    14. **(재무)** 부채비율 150% 이하
-    15. **(재무)** 최근 분기 ROE 5% 이상
-
-    **❌ 미국 주식(NASDAQ) 예외**
-    * 재무 데이터(유보율, 부채비율 등) 크롤링은 지원하지 않으며, **차트 조건만 만족하면 추출**됩니다.
-    """)
+with st.expander("📢 공지사항", expanded=False):
+    st.write("공지사항 내용")
 
 st.divider()
 
-# --- 3. 검색 설정 UI ---
-st.subheader("🛠 시장 및 수량 설정")
+# --- 3. 검색 조건 설정 (체크박스 도입) ---
+st.subheader("🛠 검색 조건 설정 (원하는 조건만 체크하세요)")
 
-col1, col2, col3, col4 = st.columns(4)
+# 조건을 그룹별로 나누어 배치 (가독성 향상)
+tab1, tab2, tab3 = st.tabs(["📊 차트/캔들 조건", "📈 이동평균선 조건", "💰 재무/기타 조건"])
 
-# 설정값 저장 변수
-targets = []
+with tab1:
+    st.markdown("##### 캔들 및 패턴")
+    c2 = st.checkbox("2. (월봉) 현재 캔들이 양봉(+)", value=True)
+    c3 = st.checkbox("3. (주봉) 고가가 직전 봉보다 높음", value=True)
+    c4 = st.checkbox("4. (주봉) 저가가 직전 봉보다 높음", value=True)
 
-with col1:
+with tab2:
+    col_ma1, col_ma2 = st.columns(2)
+    with col_ma1:
+        st.markdown("##### 이평선 배열 (정배열 등)")
+        c5 = st.checkbox("5. (일봉) 60이평 <= 120이평", value=True)
+        c6 = st.checkbox("6. (일봉) 20이평 <= 60이평", value=True)
+        c7 = st.checkbox("7. (일봉) 5이평 >= 10이평", value=True)
+        c8 = st.checkbox("8. (일봉) 10이평 >= 20이평", value=True)
+    with col_ma2:
+        st.markdown("##### 이평선 방향 (추세)")
+        c9 = st.checkbox("9. (일봉) 5이평 상승 또는 보합", value=True)
+        c10 = st.checkbox("10. (일봉) 10이평 상승", value=True)
+        c11 = st.checkbox("11. (일봉) 20이평 상승", value=True)
+
+with tab3:
+    st.markdown("##### 재무 및 기타 (한국 주식만 적용)")
+    c1 = st.checkbox("1. 제외 종목 필터 (관리/스팩/ETF 등)", value=True)
+    c12 = st.checkbox("12. 거래대금 조건 적용", value=True)
+    min_money = st.number_input("   └ 최소 거래대금 (단위: 억)", value=50, disabled=not c12)
+    
+    st.markdown("---")
+    st.caption("※ 아래 재무 조건은 한국장(KOSPI, KOSDAQ)에만 적용됩니다.")
+    c13 = st.checkbox("13. 유보율 500% 이상", value=True)
+    c14 = st.checkbox("14. 부채비율 150% 이하", value=True)
+    c15 = st.checkbox("15. 최근 분기 ROE 5% 이상", value=True)
+
+st.divider()
+
+# --- 4. 시장 및 수량 설정 ---
+st.subheader("🌍 시장 선택 및 분석 범위")
+col_m1, col_m2, col_m3 = st.columns(3)
+
+with col_m1:
     st.markdown("### 🇰🇷 코스피")
     use_kospi = st.checkbox("KOSPI 포함", value=True)
     kospi_all = st.checkbox("KOSPI 전체 검색", value=False, disabled=not use_kospi)
-    kospi_limit = st.number_input("검색 수량", 10, 3000, 50, key="kospi_n", disabled=not use_kospi or kospi_all)
+    kospi_limit = st.number_input("검색 수량", 10, 3000, 50, key="k_limit", disabled=not use_kospi or kospi_all)
 
-with col2:
+with col_m2:
     st.markdown("### 🇰🇷 코스닥")
     use_kosdaq = st.checkbox("KOSDAQ 포함", value=False)
     kosdaq_all = st.checkbox("KOSDAQ 전체 검색", value=False, disabled=not use_kosdaq)
-    kosdaq_limit = st.number_input("검색 수량", 10, 3000, 50, key="kosdaq_n", disabled=not use_kosdaq or kosdaq_all)
+    kosdaq_limit = st.number_input("검색 수량", 10, 3000, 50, key="kq_limit", disabled=not use_kosdaq or kosdaq_all)
 
-with col3:
+with col_m3:
     st.markdown("### 🇺🇸 나스닥")
     use_nasdaq = st.checkbox("NASDAQ 포함", value=False)
     nasdaq_all = st.checkbox("NASDAQ 전체 검색", value=False, disabled=not use_nasdaq)
-    nasdaq_limit = st.number_input("검색 수량", 10, 5000, 50, key="nasdaq_n", disabled=not use_nasdaq or nasdaq_all)
+    nasdaq_limit = st.number_input("검색 수량", 10, 5000, 50, key="n_limit", disabled=not use_nasdaq or nasdaq_all)
 
-with col4:
-    st.markdown("### 💰 공통 옵션")
-    min_money = st.number_input("최소 거래대금 (단위: 억)", value=50)
-    st.caption("※ 미국 주식은 1400원 환율 적용 자동 계산")
-
-
-# --- 4. 분석 로직 ---
+# --- 5. 분석 로직 ---
 
 def check_fundamental_kr(code):
-    """한국 주식 전용 재무 크롤링"""
+    """한국 주식 재무 크롤링"""
     try:
         url = f"https://finance.naver.com/item/main.naver?code={code}"
         response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=3)
@@ -87,33 +94,36 @@ def check_fundamental_kr(code):
         df_fin = pd.read_html(str(finance_html[0]))[0]
         df_fin.set_index(df_fin.columns[0], inplace=True)
         
+        # 값 추출 (데이터 없으면 에러 발생 -> except로 이동)
         reserve = float(str(df_fin.loc['유보율'].dropna().iloc[-1]).replace(',', ''))
         debt = float(str(df_fin.loc['부채비율'].dropna().iloc[-1]).replace(',', ''))
         roe = float(str(df_fin.loc['ROE'].dropna().iloc[-1]).replace(',', ''))
 
-        if reserve >= 500 and debt <= 150 and roe >= 5.0:
-            return True, {"유보율": reserve, "부채비율": debt, "ROE": roe}
-        return False, {}
+        # 조건 검증 (체크된 것만 확인)
+        # 하나라도 체크되어 있고 조건을 만족하지 못하면 False 리턴
+        if c13 and reserve < 500: return False, {}
+        if c14 and debt > 150: return False, {}
+        if c15 and roe < 5.0: return False, {}
+
+        return True, {"유보율": reserve, "부채비율": debt, "ROE": roe}
     except:
-        return False, {}
+        # 데이터가 없거나 에러인 경우, 재무 조건을 체크했다면 탈락시킴
+        if c13 or c14 or c15:
+            return False, {}
+        return True, {"유보율": "-", "부채비율": "-", "ROE": "-"}
 
 def analyze_stock(stock_info):
-    """통합 분석 함수 (KR/US 분기 처리)"""
     code = stock_info['Code']
     name = stock_info['Name']
-    market = stock_info['Market'] # 'KOSPI', 'KOSDAQ', 'NASDAQ'
+    market = stock_info['Market']
 
-    # 1. 이름 필터 (한국만 적용)
-    if market in ['KOSPI', 'KOSDAQ']:
+    # [조건 1] 제외 종목 필터 (체크되었고, 한국 시장일 때만)
+    if c1 and market in ['KOSPI', 'KOSDAQ']:
         exclusion_keywords = ["스팩", "ETF", "ETN", "홀딩스", "우"]
         for keyword in exclusion_keywords:
             if keyword in name: return None
-    else:
-        # 미국은 ETF, SPAC 등이 이름만으로 구분이 어려워 일단 진행하거나 
-        # 필요시 별도 로직 추가. 여기선 일단 패스.
-        pass
 
-    # 차트 데이터 (약 1년)
+    # 데이터 가져오기
     try:
         df = fdr.DataReader(code, start=(datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
     except:
@@ -121,28 +131,35 @@ def analyze_stock(stock_info):
         
     if len(df) < 120: return None 
 
-    # 주봉/월봉
+    # 주봉/월봉 생성
     df_week = df.resample('W').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'})
     df_month = df.resample('M').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'})
 
     if len(df_week) < 2 or len(df_month) < 2: return None
 
-    # --- 차트 조건 검사 (공통) ---
     curr_day = df.iloc[-1]
     curr_week = df_week.iloc[-1]; prev_week = df_week.iloc[-2]
     curr_month = df_month.iloc[-1]; prev_month_close = df_month.iloc[-2]['Close']
 
-    if curr_month['Close'] <= prev_month_close: return None
-    if curr_week['High'] <= prev_week['High']: return None
-    if curr_week['Low'] <= prev_week['Low']: return None
+    # --- 체크박스 조건 검증 ---
+    
+    # [조건 2] 월봉 양봉
+    if c2 and (curr_month['Close'] <= prev_month_close): return None
+    
+    # [조건 3] 주봉 고가 갱신
+    if c3 and (curr_week['High'] <= prev_week['High']): return None
+    
+    # [조건 4] 주봉 저가 상승
+    if c4 and (curr_week['Low'] <= prev_week['Low']): return None
 
+    # 이평선 계산
     ma5 = df['Close'].rolling(5).mean()
     ma10 = df['Close'].rolling(10).mean()
     ma20 = df['Close'].rolling(20).mean()
     ma60 = df['Close'].rolling(60).mean()
     ma120 = df['Close'].rolling(120).mean()
     
-    if ma120.isnull().iloc[-1]: return None
+    if ma120.isnull().iloc[-1]: return None # 데이터 부족 시
 
     c_ma5 = ma5.iloc[-1]; p_ma5 = ma5.iloc[-2]
     c_ma10 = ma10.iloc[-1]; p_ma10 = ma10.iloc[-2]
@@ -150,31 +167,35 @@ def analyze_stock(stock_info):
     c_ma60 = ma60.iloc[-1]
     c_ma120 = ma120.iloc[-1]
 
-    if not (c_ma60 <= c_ma120): return None
-    if not (c_ma20 <= c_ma60): return None
-    if not (c_ma5 >= c_ma10): return None
-    if not (c_ma10 >= c_ma20): return None
-    if not (c_ma5 >= p_ma5): return None
-    if not (c_ma10 > p_ma10): return None
-    if not (c_ma20 > p_ma20): return None
+    # [조건 5~8] 이평선 정배열
+    if c5 and not (c_ma60 <= c_ma120): return None
+    if c6 and not (c_ma20 <= c_ma60): return None
+    if c7 and not (c_ma5 >= c_ma10): return None
+    if c8 and not (c_ma10 >= c_ma20): return None
 
-    # 거래대금 계산 (환율 고려)
-    # 한국: 원화 그대로 / 미국: 달러 * 1400원(가정)
-    exchange_rate = 1400 if market == 'NASDAQ' else 1
-    df['Amount_Bil'] = (df['Close'] * df['Volume'] * exchange_rate) / 100000000
-    
-    if df['Amount_Bil'].tail(120).max() < min_money: return None
+    # [조건 9~11] 이평선 상승
+    if c9 and not (c_ma5 >= p_ma5): return None
+    if c10 and not (c_ma10 > p_ma10): return None
+    if c11 and not (c_ma20 > p_ma20): return None
 
-    # --- 재무 분석 분기 (한국만) ---
+    # [조건 12] 거래대금
+    if c12:
+        exchange_rate = 1400 if market == 'NASDAQ' else 1
+        df['Amount_Bil'] = (df['Close'] * df['Volume'] * exchange_rate) / 100000000
+        if df['Amount_Bil'].tail(120).max() < min_money: return None
+
+    # [조건 13~15] 재무 분석 (한국 주식만, 그리고 체크된 경우만)
     fin_info = {"유보율": "-", "부채비율": "-", "ROE": "-"}
     
-    if market in ['KOSPI', 'KOSDAQ']:
+    # 재무 조건 중 하나라도 체크되어 있다면 크롤링 시도
+    need_fundamental_check = (c13 or c14 or c15) and (market in ['KOSPI', 'KOSDAQ'])
+    
+    if need_fundamental_check:
         is_ok, fin = check_fundamental_kr(code)
         if not is_ok: return None
         fin_info = {k: f"{v}%" for k, v in fin.items()}
-    else:
-        # 미국 주식은 재무 통과로 간주
-        fin_info = {"유보율": "N/A", "부채비율": "N/A", "ROE": "N/A"}
+    elif market == 'NASDAQ':
+         fin_info = {"유보율": "N/A", "부채비율": "N/A", "ROE": "N/A"}
 
     # 최종 통과
     return {
@@ -186,113 +207,82 @@ def analyze_stock(stock_info):
         **fin_info
     }
 
-# --- 5. 메인 실행 ---
+# --- 6. 실행 버튼 ---
 st.divider()
 
-# 예상 종목 수 표시 로직
-def get_status_msg():
+def get_target_msg():
     msgs = []
     if use_kospi: msgs.append(f"코스피({'전체' if kospi_all else kospi_limit})")
     if use_kosdaq: msgs.append(f"코스닥({'전체' if kosdaq_all else kosdaq_limit})")
     if use_nasdaq: msgs.append(f"나스닥({'전체' if nasdaq_all else nasdaq_limit})")
     return ", ".join(msgs)
 
-if st.button("🚀 글로벌 주식 검색 시작", type="primary", use_container_width=True):
+if st.button("분석시작", type="primary", use_container_width=True):
     if not (use_kospi or use_kosdaq or use_nasdaq):
-        st.error("최소한 하나의 시장을 선택해주세요.")
+        st.error("시장을 하나 이상 선택해주세요.")
     else:
-        status_msg = get_status_msg()
-        st.write(f"🔎 **{status_msg}** 스캔을 시작합니다. (나스닥 전체 선택 시 매우 오래 걸릴 수 있습니다)")
+        st.write(f"🔎 **{get_target_msg()}** 분석을 시작합니다... (선택된 조건만 검사)")
         
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        # 1. 대상 종목 리스트 수집
+        # 종목 리스트 수집
         all_targets = []
-        
-        # KOSPI
-        if use_kospi:
-            with st.spinner("코스피 종목 목록을 불러오는 중..."):
-                k_stocks = fdr.StockListing('KOSPI')
-                k_stocks['Market'] = 'KOSPI'
-                if not kospi_all: k_stocks = k_stocks.head(kospi_limit)
-                all_targets.append(k_stocks)
-        
-        # KOSDAQ
-        if use_kosdaq:
-            with st.spinner("코스닥 종목 목록을 불러오는 중..."):
-                kqs = fdr.StockListing('KOSDAQ')
-                kqs['Market'] = 'KOSDAQ'
-                if not kosdaq_all: kqs = kqs.head(kosdaq_limit)
-                all_targets.append(kqs)
-                
-        # NASDAQ
-        if use_nasdaq:
-            with st.spinner("나스닥 종목 목록을 불러오는 중... (시간이 소요될 수 있습니다)"):
-                try:
-                    # NASDAQ 전체 리스트는 매우 큽니다.
-                    nas = fdr.StockListing('NASDAQ')
-                    nas['Market'] = 'NASDAQ'
-                    if not nasdaq_all: nas = nas.head(nasdaq_limit)
-                    all_targets.append(nas)
-                except Exception as e:
-                    st.error(f"나스닥 목록을 가져오는데 실패했습니다: {e}")
+        try:
+            if use_kospi:
+                k = fdr.StockListing('KOSPI'); k['Market'] = 'KOSPI'
+                if not kospi_all: k = k.head(kospi_limit)
+                all_targets.append(k)
+            if use_kosdaq:
+                kq = fdr.StockListing('KOSDAQ'); kq['Market'] = 'KOSDAQ'
+                if not kosdaq_all: kq = kq.head(kosdaq_limit)
+                all_targets.append(kq)
+            if use_nasdaq:
+                ns = fdr.StockListing('NASDAQ'); ns['Market'] = 'NASDAQ'
+                if not nasdaq_all: ns = ns.head(nasdaq_limit)
+                all_targets.append(ns)
+        except Exception as e:
+            st.error(f"종목 리스트 확보 실패: {e}")
+            st.stop()
 
         if not all_targets:
+            st.warning("검색 대상 종목이 없습니다.")
             st.stop()
-            
-        final_df = pd.concat(all_targets)
-        final_df.reset_index(drop=True, inplace=True)
-        
+
+        final_df = pd.concat(all_targets).reset_index(drop=True)
         stock_list = final_df.to_dict('records')
         total_len = len(stock_list)
-        
-        st.write(f"📊 총 **{total_len}개** 종목 분석 예정")
 
-        # 2. 병렬 처리 분석
         results = []
+        # 병렬 처리
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             futures = {executor.submit(analyze_stock, stock): stock for stock in stock_list}
             
-            completed_count = 0
+            cnt = 0
             for future in concurrent.futures.as_completed(futures):
                 try:
                     res = future.result()
                     if res: results.append(res)
-                except:
-                    pass
+                except: pass
                 
-                completed_count += 1
-                progress = completed_count / total_len
-                progress_bar.progress(progress)
-                status_text.text(f"🏃 분석 중... ({completed_count}/{total_len})")
+                cnt += 1
+                progress_bar.progress(cnt / total_len)
+                status_text.text(f"🏃 {cnt}/{total_len} 종목 분석 중...")
 
         progress_bar.empty()
         status_text.empty()
-        
-        # 3. 결과 출력
+
         if results:
-            st.balloons()
-            st.success(f"🎉 총 {len(results)}개의 보석 같은 종목을 발견했습니다!")
-            
-            # 결과 데이터프레임
+            st.success(f"🎉 조건에 맞는 {len(results)}개 종목 발견!")
             res_df = pd.DataFrame(results)
             
-            # 시장별로 나눠서 보여주기 (탭 기능 활용)
-            tab1, tab2 = st.tabs(["📋 전체 통합 결과", "📂 시장별 분류"])
-            
-            with tab1:
-                st.dataframe(res_df)
-                
-            with tab2:
+            tab_res1, tab_res2 = st.tabs(["📋 전체 결과", "📂 시장별 분류"])
+            with tab_res1: st.dataframe(res_df)
+            with tab_res2:
                 for mkt in ['KOSPI', 'KOSDAQ', 'NASDAQ']:
-                    mkt_df = res_df[res_df['시장'] == mkt]
-                    if not mkt_df.empty:
-                        st.write(f"**{mkt} ({len(mkt_df)}개)**")
-                        st.dataframe(mkt_df)
-                    else:
-                        if (mkt == 'KOSPI' and use_kospi) or (mkt == 'KOSDAQ' and use_kosdaq) or (mkt == 'NASDAQ' and use_nasdaq):
-                             st.write(f"**{mkt}**: 조건 만족 종목 없음")
-
+                    sub = res_df[res_df['시장'] == mkt]
+                    if not sub.empty:
+                        st.write(f"**{mkt} ({len(sub)}개)**")
+                        st.dataframe(sub)
         else:
-            st.warning("조건을 만족하는 종목이 없습니다.")
+            st.warning("조건을 만족하는 종목이 하나도 없습니다. 조건을 조금 더 풀어보세요.")
