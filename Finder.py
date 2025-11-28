@@ -12,8 +12,8 @@ st.set_page_config(page_title="주식 검색기", layout="wide")
 st.title("📈 주식 검색기")
 
 # --- 2. 공지사항 ---
-with st.expander("📢 공지사항", expanded=False):
-    st.write("TEST 중입니다")
+with st.expander("📢 공지사항", expanded=True):
+    st.write("나스닥은 안되누ㅜ")
 
 st.divider()
 
