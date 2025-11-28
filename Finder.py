@@ -12,7 +12,7 @@ st.title("📈 주식 검색기")
 
 # --- 2. 공지사항 ---
 with st.expander("📢 공지사항", expanded=False):
-    st.write("공지사항 내용")
+    st.write("TEST 중입니다")
 
 st.divider()
 
@@ -26,9 +26,9 @@ with tab1:
     all_c_group1 = st.checkbox("전체선택/해제", value=True, key="g1")
     st.divider() # 구분선 추가
     
-    c2 = st.checkbox("2. (월봉) 이번 달 캔들이 양봉(+) 상태인가? (전달 종가보다 상승 중)", value=all_c_group1)
+    c2 = st.checkbox("2. (월봉) 이번 달 캔들이 양봉(+) 상태인가?", value=all_c_group1)
     c3 = st.checkbox("3. (주봉) 이번 주 고가가 지난주 고가보다 높은가?", value=all_c_group1)
-    c4 = st.checkbox("4. (주봉) 이번 주 저가가 지난주 저가보다 높은가? (저점 상승)", value=all_c_group1)
+    c4 = st.checkbox("4. (주봉) 이번 주 저가가 지난주 저가보다 높은가?", value=all_c_group1)
 
 # [Tab 2] 이동평균선
 with tab2:
@@ -37,13 +37,11 @@ with tab2:
 
     col_ma1, col_ma2 = st.columns(2)
     with col_ma1:
-        st.markdown("##### 정배열 조건") # 텍스트 간소화
         c5 = st.checkbox("5. (일봉) 60일선이 120일선보다 아래에 있는가? (장기 역배열)", value=all_c_group2)
         c6 = st.checkbox("6. (일봉) 20일선이 60일선보다 아래에 있는가?", value=all_c_group2)
         c7 = st.checkbox("7. (일봉) 5일선이 10일선 위에 있는가? (단기 정배열)", value=all_c_group2)
         c8 = st.checkbox("8. (일봉) 10일선이 20일선 위에 있는가?", value=all_c_group2)
     with col_ma2:
-        st.markdown("##### 추세 조건") # '기울기조건' 텍스트 제거 및 대체
         c9 = st.checkbox("9. (일봉) 5일선이 상승 중이거나 평평한가?", value=all_c_group2)
         c10 = st.checkbox("10. (일봉) 10일선이 상승 중인가?", value=all_c_group2)
         c11 = st.checkbox("11. (일봉) 20일선이 상승 중인가?", value=all_c_group2)
@@ -60,9 +58,9 @@ with tab3:
     
     st.markdown("##### 재무 건전성 (한국 주식 전용)")
     st.caption("※ 나스닥은 재무 데이터 수집 제한으로 자동 통과됩니다.")
-    c13 = st.checkbox("13. 유보율 500% 이상 (현금 여력)", value=all_c_group3)
-    c14 = st.checkbox("14. 부채비율 150% 이하 (빚이 적음)", value=all_c_group3)
-    c15 = st.checkbox("15. 최근 분기 ROE 5% 이상 (수익성)", value=all_c_group3)
+    c13 = st.checkbox("13. 유보율 500% 이상", value=all_c_group3)
+    c14 = st.checkbox("14. 부채비율 150% 이하", value=all_c_group3)
+    c15 = st.checkbox("15. 최근 분기 ROE 5% 이상", value=all_c_group3)
 
 st.divider()
 
@@ -71,24 +69,24 @@ st.subheader("🌍 시장 선택 및 분석 범위")
 col_m1, col_m2, col_m3 = st.columns(3)
 
 with col_m1:
-    st.markdown("### 🇰🇷 코스피")
+    st.markdown("### 🇰🇷 KOSPI")
     use_kospi = st.checkbox("KOSPI 포함", value=True)
     kospi_all = st.checkbox("KOSPI 전체 검색", value=False, disabled=not use_kospi)
     kospi_limit = st.number_input("검색 수량", 10, 3000, 50, key="k_limit", disabled=not use_kospi or kospi_all)
 
 with col_m2:
-    st.markdown("### 🇰🇷 코스닥")
+    st.markdown("### 🇰🇷 KOSDAQ")
     use_kosdaq = st.checkbox("KOSDAQ 포함", value=False)
     kosdaq_all = st.checkbox("KOSDAQ 전체 검색", value=False, disabled=not use_kosdaq)
     kosdaq_limit = st.number_input("검색 수량", 10, 3000, 50, key="kq_limit", disabled=not use_kosdaq or kosdaq_all)
 
 with col_m3:
-    st.markdown("### 🇺🇸 나스닥")
+    st.markdown("### 🇺🇸 NASDAQ")
     use_nasdaq = st.checkbox("NASDAQ 포함", value=False)
     nasdaq_all = st.checkbox("NASDAQ 전체 검색", value=False, disabled=not use_nasdaq)
     nasdaq_limit = st.number_input("검색 수량", 10, 5000, 50, key="n_limit", disabled=not use_nasdaq or nasdaq_all)
 
-# --- 5. 분석 로직 ---
+# --- 5. ---
 
 def check_fundamental_kr(code):
     try:
