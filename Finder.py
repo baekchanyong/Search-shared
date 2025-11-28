@@ -66,16 +66,16 @@ st.subheader("분석시장 선택")
 col_m1, col_m2, col_m3 = st.columns(3)
 
 with col_m1:
-    use_kospi = st.checkbox("🇰🇷 KOSPI 전체 분석", value=True)
-    st.caption("※ 예상시간 약 1분 20초")
+    use_kospi = st.checkbox("🇰🇷 KOSPI", value=True)
+    st.caption("※ 예상시간 약 1분 30초")
     
 with col_m2:
-    use_kosdaq = st.checkbox("🇰🇷 KOSDAQ 전체 분석", value=False)
-    st.caption("※ 예상시간 2분 (코스닥 종목 약 1700개)")
+    use_kosdaq = st.checkbox("🇰🇷 KOSDAQ", value=False)
+    st.caption("※ 예상시간 3분")
 
 with col_m3:
-    use_nasdaq = st.checkbox("🇺🇸 NASDAQ 전체 분석", value=False)
-    st.caption("※ 예상시간 5분 (나스닥 종목 약 5000개)")
+    use_nasdaq = st.checkbox("🇺🇸 NASDAQ", value=False)
+    st.caption("※ 예상시간 8분")
 
 # --- 5. 분석 로직 ---
 
