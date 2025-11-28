@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import concurrent.futures
 import time
+import yfinance as yf # 나스닥 전용 데이터 수집기 추가
 
 # --- 1. 페이지 설정 ---
 st.set_page_config(page_title="주식 검색기", layout="wide")
@@ -87,7 +88,7 @@ def check_fundamental_kr(code):
         soup = BeautifulSoup(response.text, 'html.parser')
         
         finance_html = soup.select('div.section.cop_analysis div.sub_section')
-        if not finance_html: return False, {} # Fal 오타 수정
+        if not finance_html: return False, {} 
             
         df_fin = pd.read_html(str(finance_html[0]))[0]
         df_fin.set_index(df_fin.columns[0], inplace=True)
@@ -105,17 +106,34 @@ def check_fundamental_kr(code):
         if c13 or c14 or c15: return False, {}
         return True, {"유보율": "-", "부채비율": "-", "ROE": "-"}
 
-# [내부 로직 강화] 데이터 가져오기 재시도 함수 (UI 영향 없음)
-def fetch_data_with_retry(code, retries=2):
+# [핵심 수정] 데이터 가져오기 (시장별 분기 처리)
+def fetch_data_with_retry(code, market, retries=2):
+    start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+    
     for i in range(retries + 1):
         try:
-            df = fdr.DataReader(code, start=(datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
-            if df is not None and len(df) > 0:
-                return df
+            # 나스닥은 yfinance 사용 (안정성 강화)
+            if market == 'NASDAQ':
+                # yfinance는 데이터프레임 구조가 약간 다름 (Change 컬럼 없음 등)
+                ticker = yf.Ticker(code)
+                df = ticker.history(start=start_date)
+                
+                if df is not None and not df.empty:
+                    # yfinance 데이터에는 'Change' 컬럼이 없으므로 직접 계산
+                    df['Change'] = df['Close'].pct_change()
+                    return df
+                    
+            # 한국 주식은 기존 FDR 사용
+            else:
+                df = fdr.DataReader(code, start=start_date)
+                if df is not None and len(df) > 0:
+                    return df
         except:
             pass
+        
         if i < retries:
             time.sleep(1) # 재시도 전 대기
+            
     return None
 
 def analyze_stock(stock_info):
@@ -131,8 +149,8 @@ def analyze_stock(stock_info):
         for keyword in exclusion_keywords:
             if keyword in name: return None
 
-    # [내부 로직 강화] 재시도 로직 적용
-    df = fetch_data_with_retry(code)
+    # [수정] 데이터 가져오기 함수에 market 정보 전달
+    df = fetch_data_with_retry(code, market)
         
     if df is None or len(df) < 120: return None 
 
@@ -191,13 +209,18 @@ def analyze_stock(stock_info):
     elif market == 'NASDAQ':
          fin_info = {"유보율": "N/A", "부채비율": "N/A", "ROE": "N/A"}
 
+    # 나스닥의 경우 등락률 계산 시 NaN 처리 (Change 컬럼이 막 계산된 상태라)
+    change_rate = 0
+    if 'Change' in curr_day and pd.notnull(curr_day['Change']):
+        change_rate = curr_day['Change'] * 100
+        
     return {
         '순위': actual_rank,
         '시장': market,
         '종목명': name,
         '코드': code,
         '현재가': f"{curr_day['Close']:,.2f}" if market == 'NASDAQ' else f"{int(curr_day['Close']):,}원",
-        '등락률': f"{round(curr_day['Change']*100, 2)}%",
+        '등락률': f"{round(change_rate, 2)}%",
         '시가총액': f"{int(marcap / 100000000):,}억" if market != 'NASDAQ' else "정보없음",
         **fin_info
     }
@@ -207,9 +230,9 @@ st.divider()
 
 def get_target_msg():
     msgs = []
-    if use_kospi: msgs.append("KOSPI")
-    if use_kosdaq: msgs.append("KOSDAQ")
-    if use_nasdaq: msgs.append("NASDAQ")
+    if use_kospi: msgs.append("KOSPI 전체")
+    if use_kosdaq: msgs.append("KOSDAQ 전체")
+    if use_nasdaq: msgs.append("NASDAQ 전체")
     return ", ".join(msgs)
 
 if st.button("분석시작", type="primary", use_container_width=True):
@@ -243,7 +266,7 @@ if st.button("분석시작", type="primary", use_container_width=True):
             if use_nasdaq:
                 ns = fdr.StockListing('NASDAQ')
                 ns['Market'] = 'NASDAQ'
-                # 나스닥 심볼(Symbol) -> Code 변환 필수
+                # 나스닥 심볼(Symbol) -> Code 변환
                 if 'Symbol' in ns.columns:
                     ns.rename(columns={'Symbol': 'Code'}, inplace=True)
                 if 'Marcap' not in ns.columns: ns['Marcap'] = 0
@@ -272,7 +295,7 @@ if st.button("분석시작", type="primary", use_container_width=True):
         results = []
         global_cnt = 0
         
-        # [Phase 1] 한국 시장 분석 (기존처럼 10명 동시 처리)
+        # [Phase 1] 한국 시장 분석 (기존 10명)
         if list_kr:
             with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                 futures = {executor.submit(analyze_stock, stock): stock for stock in list_kr}
@@ -287,7 +310,7 @@ if st.button("분석시작", type="primary", use_container_width=True):
                     progress_bar.progress(global_cnt / total_len)
                     status_text.text(f"🏃 {global_cnt}/{total_len} 종목 분석 중... ({pct}%)")
 
-        # [Phase 2] 미국 시장 분석 (안전하게 5명 동시 처리)
+        # [Phase 2] 미국 시장 분석 (안전하게 5명)
         if list_us:
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
                 futures = {executor.submit(analyze_stock, stock): stock for stock in list_us}
