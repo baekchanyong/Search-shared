@@ -67,7 +67,7 @@ col_m1, col_m2, col_m3 = st.columns(3)
 
 with col_m1:
     use_kospi = st.checkbox("🇰🇷 KOSPI 전체 분석", value=True)
-    st.caption("※ 예상시간 2분 (코스피 종목 약 950개 + ETF등 총 2000개)")
+    st.caption("※ 예상시간 약 1분 20초")
     
 with col_m2:
     use_kosdaq = st.checkbox("🇰🇷 KOSDAQ 전체 분석", value=False)
@@ -204,7 +204,7 @@ if st.button("분석시작", type="primary", use_container_width=True):
     if not (use_kospi or use_kosdaq or use_nasdaq):
         st.error("시장을 하나 이상 선택해주세요.")
     else:
-        st.write(f"🔎 **{get_target_msg()}** 분석을 시작합니다... (종목 수가 많아 시간이 걸릴 수 있습니다)")
+        st.write(f"🔎 **{get_target_msg()}** 분석을 시작합니다.")
         
         progress_bar = st.progress(0)
         status_text = st.empty()
@@ -265,7 +265,7 @@ if st.button("분석시작", type="primary", use_container_width=True):
         status_text.empty()
 
         if results:
-            st.success(f"🎉 조건에 맞는 {len(results)}개 종목 발견!")
+            st.success(f"🎉 조건에 맞는 {len(results)}개 종목 발견했습니다.")
             
             res_df = pd.DataFrame(results)
             res_df = res_df.sort_values(by=['시장', '순위'])
