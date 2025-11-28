@@ -5,138 +5,142 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 
-# --- 1. 페이지 및 UI 설정 ---
-st.set_page_config(page_title="나만의 주식 발굴기", layout="wide")
-st.title("💎 조건에 딱 맞는 주식 발굴기")
+# --- 1. 페이지 설정 ---
+st.set_page_config(page_title="주식 검색기", layout="wide")
 
-# 사이드바: 시장 및 수량 선택
-st.sidebar.header("🔍 검색 설정")
+# 제목
+st.title("📈 주식 검색기")
 
-# 코스피 설정
+# --- 2. 공지사항 및 검색 조건 (열고 닫기 가능) ---
+with st.expander("📢 검색 조건 확인하기 (클릭해서 펼치기/접기)", expanded=False):
+    st.markdown("""
+    **다음의 15가지 조건을 모두 만족(AND)하는 종목을 찾습니다.**
+    
+    1. **제외 대상:** 거래정지, 관리/환기/주의 종목, 불성실공시, ETF, ETN, 스팩
+    2. **(월봉)** 현재 캔들이 양봉(+)일 것 (전달 종가보다 상승)
+    3. **(주봉)** 현재 고가가 직전 봉 고가보다 높을 것
+    4. **(주봉)** 현재 저가가 직전 봉 저가보다 높을 것
+    5. **(일봉)** 60일 이평선 <= 120일 이평선
+    6. **(일봉)** 20일 이평선 <= 60일 이평선
+    7. **(일봉)** 5일 이평선 >= 10일 이평선
+    8. **(일봉)** 10일 이평선 >= 20일 이평선 (정배열 초기)
+    9. **(일봉)** 5일 이평선 상승 또는 보합
+    10. **(일봉)** 10일 이평선 상승
+    11. **(일봉)** 20일 이평선 상승
+    12. **(거래대금)** 120일 이내에 50억 이상 거래 터진 날이 1회 이상 있을 것
+    13. **(재무)** 유보율 500% 이상
+    14. **(재무)** 부채비율 150% 이하
+    15. **(재무)** 최근 분기 ROE 5% 이상 (연환산 기준)
+    """)
+
+# --- 3. 사이드바: 검색 옵션 설정 ---
+st.sidebar.header("🔍 검색 옵션")
+
+# 코스피 설정 (기본값: 선택됨, 50개)
 use_kospi = st.sidebar.checkbox("코스피 (KOSPI)", value=True)
 kospi_limit = st.sidebar.number_input(
     "코스피 검색 수량", min_value=10, max_value=2000, value=50, disabled=not use_kospi
 )
 
-# 코스닥 설정
+# 코스닥 설정 (기본값: 선택안됨, 50개)
 use_kosdaq = st.sidebar.checkbox("코스닥 (KOSDAQ)", value=False)
 kosdaq_limit = st.sidebar.number_input(
     "코스닥 검색 수량", min_value=10, max_value=2000, value=50, disabled=not use_kosdaq
 )
 
-# 거래대금 설정 (조건 12)
-min_money = st.sidebar.number_input("최소 거래대금 (단위: 억)", value=50)
+st.sidebar.markdown("---")
+# 거래대금 설정 (조건 12번의 변수)
+min_money = st.sidebar.number_input("최소 거래대금 기준 (단위: 억)", value=50)
 
-# 총 검색 예상 수량 계산 및 표시
+# 총 검색 예상 수량 계산
 total_count = 0
 if use_kospi: total_count += kospi_limit
 if use_kosdaq: total_count += kosdaq_limit
 
-st.sidebar.markdown(f"### 📊 총 검색 예정: **{total_count}개** 종목")
-st.sidebar.info("재무 정보(유보율, 부채비율 등) 크롤링이 포함되어 속도가 다소 느릴 수 있습니다.")
+st.sidebar.info(f"총 {total_count}개 종목을 분석합니다.\n(재무 크롤링으로 시간이 소요됩니다)")
 
-# --- 2. 핵심 함수: 데이터 분석 ---
 
-# (A) 재무제표 크롤링 함수 (네이버 금융) - 조건 13, 14, 15
+# --- 4. 데이터 분석 함수들 ---
+
+# (A) 재무제표 크롤링 (네이버 금융)
 def check_fundamental(code):
     try:
         url = f"https://finance.naver.com/item/main.naver?code={code}"
         response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 재무제표 테이블 찾기
         finance_html = soup.select('div.section.cop_analysis div.sub_section')
         if not finance_html:
-            return False, {} # 재무 데이터 없음
+            return False, {}
             
-        # 데이터프레임으로 변환 (판다스가 html 표를 읽어줍니다)
         df_fin = pd.read_html(str(finance_html[0]))[0]
-        
-        # 데이터 정리 (최근 결산, 최근 분기 찾기)
-        # 보통 테이블의 맨 오른쪽이 최근 추정치거나 최근 실적입니다.
-        # 인덱스 설정 등을 통해 값을 가져옵니다. (약식 구현)
-        # 실제로는 컬럼명을 정확히 파싱해야 하지만, 여기서는 행 이름으로 찾습니다.
         df_fin.set_index(df_fin.columns[0], inplace=True)
         
-        # 최근 결산 연도 (보통 최근 4개년치 중 마지막 확정치)
-        # 데이터가 문자열일 수 있어 처리가 필요합니다.
+        # 데이터가 존재하는 가장 최근 컬럼 찾기 (오른쪽 끝이 보통 최근)
+        # 안전장치: 데이터가 없는 경우를 대비해 fillna
         
-        # 편의상 가장 최근 '연간' 실적 위치를 -2 (추정치 제외 전년도) 정도로 가정하거나
-        # 데이터가 있는 가장 최근 컬럼을 가져오는 로직이 필요합니다.
-        # 여기서는 단순화를 위해 '최근' 데이터를 가져온다고 가정합니다.
+        # 13. 유보율
+        reserve_series = df_fin.loc['유보율'].dropna()
+        if reserve_series.empty: return False, {}
+        reserve_ratio = float(str(reserve_series.iloc[-1]).replace(',', ''))
         
-        # 13. 유보율 (최근 결산)
-        reserve_ratio = df_fin.loc['유보율'].dropna().iloc[-1]
+        # 14. 부채비율
+        debt_series = df_fin.loc['부채비율'].dropna()
+        if debt_series.empty: return False, {}
+        debt_ratio = float(str(debt_series.iloc[-1]).replace(',', ''))
         
-        # 14. 부채비율 (최근 결산)
-        debt_ratio = df_fin.loc['부채비율'].dropna().iloc[-1]
-        
-        # 15. ROE (최근 분기 - 보통 분기 실적은 아래쪽 테이블에 따로 있으나, 여기선 연환산 기준을 사용)
-        roe = df_fin.loc['ROE'].dropna().iloc[-1]
+        # 15. ROE
+        roe_series = df_fin.loc['ROE'].dropna()
+        if roe_series.empty: return False, {}
+        roe = float(str(roe_series.iloc[-1]).replace(',', ''))
 
-        # 데이터 형변환 (문자열 -> 숫자)
-        reserve_ratio = float(str(reserve_ratio).replace(',', ''))
-        debt_ratio = float(str(debt_ratio).replace(',', ''))
-        roe = float(str(roe).replace(',', ''))
+        # 조건 검증
+        if reserve_ratio >= 500 and debt_ratio <= 150 and roe >= 5.0:
+            return True, {"유보율": reserve_ratio, "부채비율": debt_ratio, "ROE": roe}
+        else:
+            return False, {}
 
-        # 조건 비교
-        cond13 = reserve_ratio >= 500
-        cond14 = debt_ratio <= 150
-        cond15 = roe >= 5.0
-        
-        is_pass = cond13 and cond14 and cond15
-        return is_pass, {"유보율": reserve_ratio, "부채비율": debt_ratio, "ROE": roe}
-
-    except Exception as e:
-        # print(f"재무 데이터 오류 ({code}): {e}") # 디버깅용
+    except Exception:
         return False, {}
 
-# (B) 기술적 분석 및 전체 로직 함수
+# (B) 차트 및 기술적 분석
 def analyze_stock(code, name):
-    # 1. 제외 종목 필터 (이름 기반 1차 필터)
-    # 관리종목, 환기종목 등은 별도 API 없이는 정확한 확인이 어렵지만,
-    # 스팩, ETF, ETN은 이름으로 거를 수 있습니다.
-    exclusion_keywords = ["스팩", "ETF", "ETN", "홀딩스", "우"] # 우선주나 지주사도 보통 제외함
+    # 1. 이름 필터 (스팩, ETF 등 제외)
+    exclusion_keywords = ["스팩", "ETF", "ETN", "홀딩스", "우"]
     for keyword in exclusion_keywords:
-        if keyword in name:
-            return None
+        if keyword in name: return None
 
-    # 차트 데이터 가져오기 (약 200일 치 - 120일 이평선 계산 위해 넉넉히)
-    df = fdr.DataReader(code, start=(datetime.now() - timedelta(days=300)).strftime('%Y-%m-%d'))
-    
-    if len(df) < 120: return None # 상장한지 얼마 안 된 종목 제외
+    # 차트 데이터 (약 1년치)
+    try:
+        df = fdr.DataReader(code, start=(datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
+    except:
+        return None
+        
+    if len(df) < 120: return None # 신규 상장주 제외
 
-    # --- 주봉, 월봉 데이터 생성 (Resampling) ---
+    # 주봉/월봉 생성
     df_week = df.resample('W').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'})
     df_month = df.resample('M').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'})
 
-    # 데이터가 너무 짧으면 패스
     if len(df_week) < 2 or len(df_month) < 2: return None
 
-    # 현재 캔들 (아직 완성 안 된 오늘/이번주/이번달 포함)
     curr_day = df.iloc[-1]
-    curr_week = df_week.iloc[-1]
-    prev_week = df_week.iloc[-2]
-    curr_month = df_month.iloc[-1]
-    prev_month_close = df_month.iloc[-2]['Close']
+    curr_week = df_week.iloc[-1]; prev_week = df_week.iloc[-2]
+    curr_month = df_month.iloc[-1]; prev_month_close = df_month.iloc[-2]['Close']
 
-    # --- 조건 검사 시작 ---
-
-    # 2. (월봉) 현재 캔들이 빨간색 (전달 종가보다 높음)
+    # 2. (월봉) 양봉
     if curr_month['Close'] <= prev_month_close: return None
-
-    # 3. (주봉) 현재 고가 > 전주 고가
+    # 3. (주봉) 고가 갱신
     if curr_week['High'] <= prev_week['High']: return None
-    
-    # 4. (주봉) 현재 저가 > 전주 저가
+    # 4. (주봉) 저가 높임
     if curr_week['Low'] <= prev_week['Low']: return None
 
-    # --- 일봉 이동평균선 계산 ---
-    ma5 = df['Close'].rolling(window=5).mean()
-    ma10 = df['Close'].rolling(window=10).mean()
-    ma20 = df['Close'].rolling(window=20).mean()
-    ma60 = df['Close'].rolling(window=60).mean()
-    ma120 = df['Close'].rolling(window=120).mean()
+    # 이평선 계산
+    ma5 = df['Close'].rolling(5).mean()
+    ma10 = df['Close'].rolling(10).mean()
+    ma20 = df['Close'].rolling(20).mean()
+    ma60 = df['Close'].rolling(60).mean()
+    ma120 = df['Close'].rolling(120).mean()
     
     c_ma5 = ma5.iloc[-1]; p_ma5 = ma5.iloc[-2]
     c_ma10 = ma10.iloc[-1]; p_ma10 = ma10.iloc[-2]
@@ -144,84 +148,62 @@ def analyze_stock(code, name):
     c_ma60 = ma60.iloc[-1]
     c_ma120 = ma120.iloc[-1]
 
-    # 5. 60이평 <= 120이평
+    # 5~8. 이평선 배열 조건
     if not (c_ma60 <= c_ma120): return None
-    
-    # 6. 20이평 <= 60이평
     if not (c_ma20 <= c_ma60): return None
-    
-    # 7. 5이평 >= 10이평
     if not (c_ma5 >= c_ma10): return None
-    
-    # 8. 10이평 >= 20이평
     if not (c_ma10 >= c_ma20): return None
     
-    # 9. 5이평 상승 또는 보합 (현재 >= 어제)
+    # 9~11. 이평선 방향성
     if not (c_ma5 >= p_ma5): return None
-    
-    # 10. 10이평 상승 (현재 > 어제)
     if not (c_ma10 > p_ma10): return None
-    
-    # 11. 20이평 상승 (현재 > 어제)
     if not (c_ma20 > p_ma20): return None
 
-    # 12. 120일 내 50억 이상 거래대금 1회 이상
-    # 거래대금 = 종가 * 거래량 (단위: 원 -> 억 환산하려면 100,000,000 나눔)
+    # 12. 거래대금 (입력받은 min_money 억 이상)
     df['Amount_Bil'] = (df['Close'] * df['Volume']) / 100000000
-    # 최근 120일 데이터 자르기
-    recent_120 = df['Amount_Bil'].tail(120)
-    if recent_120.max() < min_money: return None
+    if df['Amount_Bil'].tail(120).max() < min_money: return None
 
-    # --- 차트 조건 통과! 이제 재무 확인 (느리므로 마지막에) ---
-    is_fundamental_ok, fin_data = check_fundamental(code)
+    # 모든 차트 조건 통과 시 -> 재무 확인 (속도 위해 마지막에)
+    is_ok, fin = check_fundamental(code)
     
-    if is_fundamental_ok:
+    if is_ok:
         return {
             '종목명': name,
             '코드': code,
             '현재가': f"{int(curr_day['Close']):,}원",
-            '유보율': f"{fin_data['유보율']}%",
-            '부채비율': f"{fin_data['부채비율']}%",
-            'ROE': f"{fin_data['ROE']}%",
-            '차트평': "정배열 초기/역배열 말기 조건 만족"
+            '등락률': f"{round(curr_day['Change']*100, 2)}%",
+            '유보율': f"{fin['유보율']}%",
+            '부채비율': f"{fin['부채비율']}%",
+            'ROE': f"{fin['ROE']}%"
         }
-    
     return None
 
-# --- 3. 실행 버튼 및 루프 ---
-if st.button("🚀 나만의 전략으로 종목 찾기"):
+# --- 5. 실행 버튼 ---
+if st.button("🚀 종목 발굴 시작"):
     if total_count == 0:
-        st.error("시장이나 수량을 선택해주세요!")
+        st.warning("왼쪽 사이드바에서 시장과 수량을 선택해주세요!")
     else:
-        st.write(f"분석을 시작합니다... (총 {total_count}개 종목 스캔)")
+        st.write(f"설정된 조건으로 {total_count}개 종목을 분석 중입니다... 잠시만 기다려주세요.")
         progress_bar = st.progress(0)
         status_text = st.empty()
         
         results = []
-        
-        # 종목 리스트 가져오기
         target_stocks = pd.DataFrame()
         
         if use_kospi:
-            kospi_stocks = fdr.StockListing('KOSPI').head(kospi_limit)
-            target_stocks = pd.concat([target_stocks, kospi_stocks])
-            
+            target_stocks = pd.concat([target_stocks, fdr.StockListing('KOSPI').head(kospi_limit)])
         if use_kosdaq:
-            kosdaq_stocks = fdr.StockListing('KOSDAQ').head(kosdaq_limit)
-            target_stocks = pd.concat([target_stocks, kosdaq_stocks])
+            target_stocks = pd.concat([target_stocks, fdr.StockListing('KOSDAQ').head(kosdaq_limit)])
             
-        # 반복문 실행
+        # 인덱스 재설정 (중요)
+        target_stocks.reset_index(drop=True, inplace=True)
+
         for i in range(len(target_stocks)):
             row = target_stocks.iloc[i]
-            code = row['Code']
-            name = row['Name']
+            status_text.text(f"🔍 분석 중 ({i+1}/{len(target_stocks)}): {row['Name']}")
             
-            status_text.text(f"분석 중 ({i+1}/{total_count}): {name}")
-            
-            # 분석 실행
-            result = analyze_stock(code, name)
-            if result:
-                results.append(result)
+            res = analyze_stock(row['Code'], row['Name'])
+            if res: results.append(res)
             
             progress_bar.progress((i + 1) / len(target_stocks))
             
@@ -229,8 +211,7 @@ if st.button("🚀 나만의 전략으로 종목 찾기"):
         status_text.empty()
         
         if results:
-            st.success(f"조건을 완벽하게 만족하는 {len(results)}개 종목을 발견했습니다! 🎉")
-            st.table(pd.DataFrame(results))
+            st.success(f"조건을 만족하는 {len(results)}개 종목을 찾았습니다!")
+            st.dataframe(pd.DataFrame(results))
         else:
-            st.warning("아쉽게도 모든 조건을 만족하는 종목이 없습니다. 조건을 조금 완화해보세요.")
-
+            st.info("검색된 종목이 없습니다. 조건을 조금 완화하거나 검색 수량을 늘려보세요.")
