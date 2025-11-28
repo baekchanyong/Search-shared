@@ -86,7 +86,7 @@ def check_fundamental_kr(code):
         soup = BeautifulSoup(response.text, 'html.parser')
         
         finance_html = soup.select('div.section.cop_analysis div.sub_section')
-        if not finance_html: return False, {} # Fal 오타 수정됨
+        if not finance_html: return False, {}
             
         df_fin = pd.read_html(str(finance_html[0]))[0]
         df_fin.set_index(df_fin.columns[0], inplace=True)
@@ -118,11 +118,12 @@ def analyze_stock(stock_info):
             if keyword in name: return None
 
     try:
+        # 미국 주식은 DataReader가 간혹 실패할 수 있어 예외처리 중요
         df = fdr.DataReader(code, start=(datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
     except:
         return None
         
-    if len(df) < 120: return None 
+    if df is None or len(df) < 120: return None 
 
     df_week = df.resample('W').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'})
     df_month = df.resample('M').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'})
@@ -211,7 +212,7 @@ if st.button("분석시작", type="primary", use_container_width=True):
         
         all_targets = []
         try:
-            # 1. 수량 제한 없이(.head() 제거) 전체 리스트 가져오기
+            # 1. 수량 제한 없이 전체 리스트 가져오기
             if use_kospi:
                 k = fdr.StockListing('KOSPI'); k['Market'] = 'KOSPI'
                 if 'Marcap' not in k.columns: k['Marcap'] = 0
@@ -227,7 +228,12 @@ if st.button("분석시작", type="primary", use_container_width=True):
                 all_targets.append(kq)
                 
             if use_nasdaq:
-                ns = fdr.StockListing('NASDAQ'); ns['Market'] = 'NASDAQ'
+                ns = fdr.StockListing('NASDAQ') # 나스닥 전체 리스트
+                ns['Market'] = 'NASDAQ'
+                # [중요 수정] 나스닥은 'Symbol'이 코드이므로 이를 'Code'로 이름 변경
+                if 'Symbol' in ns.columns:
+                    ns.rename(columns={'Symbol': 'Code'}, inplace=True)
+                
                 if 'Marcap' not in ns.columns: ns['Marcap'] = 0
                 ns['Actual_Rank'] = range(1, len(ns) + 1)
                 all_targets.append(ns)
