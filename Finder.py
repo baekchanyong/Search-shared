@@ -1,3 +1,4 @@
+
 import streamlit as st
 import FinanceDataReader as fdr
 import pandas as pd
@@ -62,7 +63,7 @@ with tab3:
 st.divider()
 
 # --- 4. 시장 및 수량 설정 ---
-st.subheader("🌍 시장 선택 및 분석 범위")
+st.subheader("분석시장 선택")
 col_m1, col_m2, col_m3 = st.columns(3)
 
 with col_m1:
