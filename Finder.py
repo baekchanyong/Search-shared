@@ -5,6 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import concurrent.futures
+import time
 
 # --- 1. 페이지 설정 ---
 st.set_page_config(page_title="주식 검색기", layout="wide")
@@ -61,21 +62,21 @@ with tab3:
 
 st.divider()
 
-# --- 4. 시장 설정 (수량 입력 제거됨) ---
+# --- 4. 시장 설정 ---
 st.subheader("분석시장 선택")
 col_m1, col_m2, col_m3 = st.columns(3)
 
 with col_m1:
     use_kospi = st.checkbox("🇰🇷 KOSPI", value=True)
-    st.caption("※ 예상시간 1분 30초")
+    st.caption("※ 예상시간 1분 30초 (고속)")
     
 with col_m2:
     use_kosdaq = st.checkbox("🇰🇷 KOSDAQ", value=False)
-    st.caption("※ 예상시간 3분")
+    st.caption("※ 예상시간 3분 (고속)")
 
 with col_m3:
     use_nasdaq = st.checkbox("🇺🇸 NASDAQ", value=False)
-    st.caption("※ 예상시간 8분")
+    st.caption("※ 예상시간 10분 이상 (안전모드)")
 
 # --- 5. 분석 로직 ---
 
@@ -104,25 +105,33 @@ def check_fundamental_kr(code):
         if c13 or c14 or c15: return False, {}
         return True, {"유보율": "-", "부채비율": "-", "ROE": "-"}
 
+def fetch_data_with_retry(code, retries=1):
+    for i in range(retries + 1):
+        try:
+            df = fdr.DataReader(code, start=(datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
+            if df is not None and len(df) > 0:
+                return df
+        except:
+            pass
+        if i < retries:
+            time.sleep(1)
+    return None
+
 def analyze_stock(stock_info):
     code = stock_info['Code']
     name = stock_info['Name']
     market = stock_info['Market']
-    actual_rank = stock_info['Actual_Rank']
+    actual_rank = stock_info.get('Actual_Rank', 0)
     marcap = stock_info.get('Marcap', 0)
 
-    # [조건 1] 제외 종목 필터
     if c1 and market in ['KOSPI', 'KOSDAQ']:
         exclusion_keywords = ["스팩", "ETF", "ETN", "홀딩스", "우"]
         for keyword in exclusion_keywords:
             if keyword in name: return None
 
-    try:
-        # 미국 주식은 DataReader가 간혹 실패할 수 있어 예외처리 중요
-        df = fdr.DataReader(code, start=(datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
-    except:
-        return None
-        
+    # 데이터 가져오기 (재시도 로직 포함)
+    df = fetch_data_with_retry(code)
+    
     if df is None or len(df) < 120: return None 
 
     df_week = df.resample('W').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'})
@@ -134,12 +143,10 @@ def analyze_stock(stock_info):
     curr_week = df_week.iloc[-1]; prev_week = df_week.iloc[-2]
     curr_month = df_month.iloc[-1]; prev_month_close = df_month.iloc[-2]['Close']
 
-    # 캔들 조건
     if c2 and (curr_month['Close'] <= prev_month_close): return None
     if c3 and (curr_week['High'] <= prev_week['High']): return None
     if c4 and (curr_week['Low'] <= prev_week['Low']): return None
 
-    # 이평선 계산
     ma5 = df['Close'].rolling(5).mean()
     ma10 = df['Close'].rolling(10).mean()
     ma20 = df['Close'].rolling(20).mean()
@@ -154,7 +161,6 @@ def analyze_stock(stock_info):
     c_ma60 = ma60.iloc[-1]
     c_ma120 = ma120.iloc[-1]
 
-    # 이평선 조건
     if c5 and not (c_ma60 <= c_ma120): return None
     if c6 and not (c_ma20 <= c_ma60): return None
     if c7 and not (c_ma5 >= c_ma10): return None
@@ -163,13 +169,11 @@ def analyze_stock(stock_info):
     if c10 and not (c_ma10 > p_ma10): return None
     if c11 and not (c_ma20 > p_ma20): return None
 
-    # 거래대금 조건
     if c12:
         exchange_rate = 1400 if market == 'NASDAQ' else 1
         df['Amount_Bil'] = (df['Close'] * df['Volume'] * exchange_rate) / 100000000
         if df['Amount_Bil'].tail(120).max() < min_money: return None
 
-    # 재무 분석
     fin_info = {"유보율": "-", "부채비율": "-", "ROE": "-"}
     need_fundamental_check = (c13 or c14 or c15) and (market in ['KOSPI', 'KOSDAQ'])
     
@@ -210,62 +214,83 @@ if st.button("분석시작", type="primary", use_container_width=True):
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        all_targets = []
+        # 목록을 각각 분리해서 담기
+        kr_targets = []
+        us_targets = []
+        
         try:
-            # 1. 수량 제한 없이 전체 리스트 가져오기
+            # 1. 한국 시장 (KOSPI/KOSDAQ)
             if use_kospi:
                 k = fdr.StockListing('KOSPI'); k['Market'] = 'KOSPI'
                 if 'Marcap' not in k.columns: k['Marcap'] = 0
                 k = k.sort_values(by='Marcap', ascending=False)
                 k['Actual_Rank'] = range(1, len(k) + 1)
-                all_targets.append(k)
+                kr_targets.append(k)
                 
             if use_kosdaq:
                 kq = fdr.StockListing('KOSDAQ'); kq['Market'] = 'KOSDAQ'
                 if 'Marcap' not in kq.columns: kq['Marcap'] = 0
                 kq = kq.sort_values(by='Marcap', ascending=False)
                 kq['Actual_Rank'] = range(1, len(kq) + 1)
-                all_targets.append(kq)
+                kr_targets.append(kq)
                 
+            # 2. 미국 시장 (NASDAQ)
             if use_nasdaq:
-                ns = fdr.StockListing('NASDAQ') # 나스닥 전체 리스트
+                ns = fdr.StockListing('NASDAQ')
                 ns['Market'] = 'NASDAQ'
-                # [중요 수정] 나스닥은 'Symbol'이 코드이므로 이를 'Code'로 이름 변경
                 if 'Symbol' in ns.columns:
                     ns.rename(columns={'Symbol': 'Code'}, inplace=True)
-                
                 if 'Marcap' not in ns.columns: ns['Marcap'] = 0
                 ns['Actual_Rank'] = range(1, len(ns) + 1)
-                all_targets.append(ns)
+                us_targets.append(ns)
                 
         except Exception as e:
             st.error(f"종목 리스트 확보 실패: {e}")
             st.stop()
 
-        if not all_targets:
+        # 데이터 정리
+        df_kr = pd.concat(kr_targets).reset_index(drop=True) if kr_targets else pd.DataFrame()
+        df_us = pd.concat(us_targets).reset_index(drop=True) if us_targets else pd.DataFrame()
+        
+        list_kr = df_kr.to_dict('records')
+        list_us = df_us.to_dict('records')
+        
+        total_len = len(list_kr) + len(list_us)
+        if total_len == 0:
             st.warning("검색 대상 종목이 없습니다.")
             st.stop()
-
-        final_df = pd.concat(all_targets).reset_index(drop=True)
-        stock_list = final_df.to_dict('records')
-        total_len = len(stock_list)
-        
-        st.write(f"📊 총 **{total_len}개** 종목을 스캔합니다.")
-
-        results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            futures = {executor.submit(analyze_stock, stock): stock for stock in stock_list}
             
-            cnt = 0
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    res = future.result()
-                    if res: results.append(res)
-                except: pass
-                
-                cnt += 1
-                progress_bar.progress(cnt / total_len)
-                status_text.text(f"🏃 {cnt}/{total_len} 종목 분석 중... ({int((cnt/total_len)*100)}%)")
+        st.write(f"📊 총 **{total_len}개** 종목을 스캔합니다.")
+        results = []
+        global_count = 0
+
+        # --- Phase 1: 한국 주식 (빠르게: 10 Threads) ---
+        if list_kr:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                futures = {executor.submit(analyze_stock, stock): stock for stock in list_kr}
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        res = future.result()
+                        if res: results.append(res)
+                    except: pass
+                    global_count += 1
+                    pct = int((global_count/total_len)*100)
+                    progress_bar.progress(global_count / total_len)
+                    status_text.text(f"🏃 [한국시장] 분석 중... ({pct}%)")
+
+        # --- Phase 2: 미국 주식 (안전하게: 5 Threads) ---
+        if list_us:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                futures = {executor.submit(analyze_stock, stock): stock for stock in list_us}
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        res = future.result()
+                        if res: results.append(res)
+                    except: pass
+                    global_count += 1
+                    pct = int((global_count/total_len)*100)
+                    progress_bar.progress(global_count / total_len)
+                    status_text.text(f"🏃 [미국시장] 분석 중... ({pct}%)")
 
         progress_bar.empty()
         status_text.empty()
