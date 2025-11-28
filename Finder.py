@@ -24,8 +24,7 @@ tab1, tab2, tab3 = st.tabs(["📊 차트/캔들", "📈 이동평균선", "💰 
 # [Tab 1] 캔들/패턴
 with tab1:
     all_c_group1 = st.checkbox("전체선택/해제", value=True, key="g1")
-    st.divider() # 구분선 추가
-    
+    st.divider() # 구분선 추가    
     c2 = st.checkbox("2. (월봉) 이번 달 캔들이 양봉(+) 상태인가?", value=all_c_group1)
     c3 = st.checkbox("3. (주봉) 이번 주 고가가 지난주 고가보다 높은가?", value=all_c_group1)
     c4 = st.checkbox("4. (주봉) 이번 주 저가가 지난주 저가보다 높은가?", value=all_c_group1)
