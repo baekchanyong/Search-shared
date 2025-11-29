@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import concurrent.futures
 import time
-import yfinance as yf # 나스닥 전용 데이터 수집기 추가
+import yfinance as yf
 
 # --- 1. 페이지 설정 ---
 st.set_page_config(page_title="주식 검색기", layout="wide")
@@ -26,11 +26,13 @@ tab1, tab2, tab3 = st.tabs(["📊 차트/캔들", "📈 이동평균선", "💰 
 
 # [Tab 1] 캔들/패턴
 with tab1:
+    # [수정] 이모지/색상 제거, 기본 스타일로 복귀
     all_c_group1 = st.checkbox("전체선택/해제", value=True, key="g1")
     
     c2 = st.checkbox("2. (월봉) 이번 달 캔들이 양봉(+) 상태인가?", value=all_c_group1)
     c3 = st.checkbox("3. (주봉) 이번 주 고가가 지난주 고가보다 높은가?", value=all_c_group1)
     c4 = st.checkbox("4. (주봉) 이번 주 저가가 지난주 저가보다 높은가?", value=all_c_group1)
+    c_rsi = st.checkbox("RSI(14) 지표가 70 이하인가?", value=all_c_group1)
 
 # [Tab 2] 이동평균선
 with tab2:
@@ -46,6 +48,7 @@ with tab2:
         c9 = st.checkbox("9. (일봉) 5일선이 상승 중이거나 평평한가?", value=all_c_group2)
         c10 = st.checkbox("10. (일봉) 10일선이 상승 중인가?", value=all_c_group2)
         c11 = st.checkbox("11. (일봉) 20일선이 상승 중인가?", value=all_c_group2)
+    c_ma5_high = st.checkbox("(일봉) 5일선이 전고점을 돌파했는가?(최근60일)", value=all_c_group2)
 
 # [Tab 3] 재무/기타
 with tab3:
@@ -64,7 +67,7 @@ with tab3:
 
 st.divider()
 
-# --- 4. 시장 설정 (수량 입력 제거됨) ---
+# --- 4. 시장 설정 ---
 st.subheader("분석시장 선택")
 col_m1, col_m2, col_m3 = st.columns(3)
 
@@ -107,34 +110,25 @@ def check_fundamental_kr(code):
         if c13 or c14 or c15: return False, {}
         return True, {"유보율": "-", "부채비율": "-", "ROE": "-"}
 
-# [핵심 수정] 데이터 가져오기 (시장별 분기 처리)
 def fetch_data_with_retry(code, market, retries=2):
     start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
     
     for i in range(retries + 1):
         try:
-            # 나스닥은 yfinance 사용 (안정성 강화)
             if market == 'NASDAQ':
-                # yfinance는 데이터프레임 구조가 약간 다름 (Change 컬럼 없음 등)
                 ticker = yf.Ticker(code)
                 df = ticker.history(start=start_date)
-                
                 if df is not None and not df.empty:
-                    # yfinance 데이터에는 'Change' 컬럼이 없으므로 직접 계산
                     df['Change'] = df['Close'].pct_change()
                     return df
-                    
-            # 한국 주식은 기존 FDR 사용
             else:
                 df = fdr.DataReader(code, start=start_date)
                 if df is not None and len(df) > 0:
                     return df
         except:
             pass
-        
         if i < retries:
-            time.sleep(1) # 재시도 전 대기
-            
+            time.sleep(1)
     return None
 
 def analyze_stock(stock_info):
@@ -144,13 +138,11 @@ def analyze_stock(stock_info):
     actual_rank = stock_info['Actual_Rank']
     marcap = stock_info.get('Marcap', 0)
 
-    # [조건 1] 제외 종목 필터
     if c1 and market in ['KOSPI', 'KOSDAQ']:
         exclusion_keywords = ["스팩", "ETF", "ETN", "홀딩스", "우"]
         for keyword in exclusion_keywords:
             if keyword in name: return None
 
-    # [수정] 데이터 가져오기 함수에 market 정보 전달
     df = fetch_data_with_retry(code, market)
         
     if df is None or len(df) < 120: return None 
@@ -168,6 +160,19 @@ def analyze_stock(stock_info):
     if c2 and (curr_month['Close'] <= prev_month_close): return None
     if c3 and (curr_week['High'] <= prev_week['High']): return None
     if c4 and (curr_week['Low'] <= prev_week['Low']): return None
+
+    # [추가] RSI 70 이하 조건
+    if c_rsi:
+        delta = df['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        current_rsi = rsi.iloc[-1]
+        
+        # RSI가 계산되지 않거나 70을 초과하면 탈락
+        if pd.isna(current_rsi) or current_rsi > 70:
+            return None
 
     # 이평선 계산
     ma5 = df['Close'].rolling(5).mean()
@@ -192,6 +197,17 @@ def analyze_stock(stock_info):
     if c9 and not (c_ma5 >= p_ma5): return None
     if c10 and not (c_ma10 > p_ma10): return None
     if c11 and not (c_ma20 > p_ma20): return None
+    
+    # [추가] 5일선 전고점 돌파 조건
+    if c_ma5_high:
+        lookback = 60
+        if len(ma5) > lookback:
+            past_ma5 = ma5.iloc[-(lookback+1):-1]
+        else:
+            past_ma5 = ma5.iloc[:-1]
+            
+        prev_max_ma5 = past_ma5.max()
+        if c_ma5 <= prev_max_ma5: return None
 
     # 거래대금 조건
     if c12:
@@ -199,7 +215,6 @@ def analyze_stock(stock_info):
         df['Amount_Bil'] = (df['Close'] * df['Volume'] * exchange_rate) / 100000000
         if df['Amount_Bil'].tail(120).max() < min_money: return None
 
-    # 재무 분석
     fin_info = {"유보율": "-", "부채비율": "-", "ROE": "-"}
     need_fundamental_check = (c13 or c14 or c15) and (market in ['KOSPI', 'KOSDAQ'])
     
@@ -210,7 +225,6 @@ def analyze_stock(stock_info):
     elif market == 'NASDAQ':
          fin_info = {"유보율": "N/A", "부채비율": "N/A", "ROE": "N/A"}
 
-    # 나스닥의 경우 등락률 계산 시 NaN 처리 (Change 컬럼이 막 계산된 상태라)
     change_rate = 0
     if 'Change' in curr_day and pd.notnull(curr_day['Change']):
         change_rate = curr_day['Change'] * 100
@@ -245,7 +259,6 @@ if st.button("분석시작", type="primary", use_container_width=True):
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        # 목록을 각각 확보
         kr_targets = []
         us_targets = []
         
@@ -267,7 +280,6 @@ if st.button("분석시작", type="primary", use_container_width=True):
             if use_nasdaq:
                 ns = fdr.StockListing('NASDAQ')
                 ns['Market'] = 'NASDAQ'
-                # 나스닥 심볼(Symbol) -> Code 변환
                 if 'Symbol' in ns.columns:
                     ns.rename(columns={'Symbol': 'Code'}, inplace=True)
                 if 'Marcap' not in ns.columns: ns['Marcap'] = 0
@@ -278,7 +290,6 @@ if st.button("분석시작", type="primary", use_container_width=True):
             st.error(f"종목 리스트 확보 실패: {e}")
             st.stop()
 
-        # 한국/미국 리스트 분리
         df_kr = pd.concat(kr_targets).reset_index(drop=True) if kr_targets else pd.DataFrame()
         df_us = pd.concat(us_targets).reset_index(drop=True) if us_targets else pd.DataFrame()
         
@@ -296,7 +307,6 @@ if st.button("분석시작", type="primary", use_container_width=True):
         results = []
         global_cnt = 0
         
-        # [Phase 1] 한국 시장 분석 (기존 10명)
         if list_kr:
             with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                 futures = {executor.submit(analyze_stock, stock): stock for stock in list_kr}
@@ -311,7 +321,6 @@ if st.button("분석시작", type="primary", use_container_width=True):
                     progress_bar.progress(global_cnt / total_len)
                     status_text.text(f"🏃 {global_cnt}/{total_len} 종목 분석 중... ({pct}%)")
 
-        # [Phase 2] 미국 시장 분석 (안전하게 5명)
         if list_us:
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
                 futures = {executor.submit(analyze_stock, stock): stock for stock in list_us}
