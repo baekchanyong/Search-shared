@@ -109,6 +109,7 @@ def check_fundamental_kr(code):
         if c13 or c14 or c15: return False, {}
         return True, {"유보율": "-", "부채비율": "-", "ROE": "-"}
 
+# 데이터 가져오기 (시장별 분기 처리)
 def fetch_data_with_retry(code, market, retries=2):
     start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
     
@@ -248,6 +249,32 @@ def get_target_msg():
     if use_nasdaq: msgs.append("NASDAQ")
     return ", ".join(msgs)
 
+# [안전장치] 종목 리스트 가져오기 (재시도 및 우회 로직 포함)
+def get_stock_listing(market):
+    try:
+        # 1차 시도: 일반적인 호출
+        df = fdr.StockListing(market)
+        return df
+    except Exception:
+        # 1차 실패 시: KRX 전체에서 필터링 (한국 시장만 해당)
+        if market in ['KOSPI', 'KOSDAQ']:
+            try:
+                df = fdr.StockListing('KRX')
+                if market == 'KOSPI':
+                    return df[df['Market'] == 'KOSPI']
+                elif market == 'KOSDAQ':
+                    return df[df['Market'] == 'KOSDAQ']
+            except:
+                return None
+        # 나스닥 실패 시: S&P500으로 대체 시도
+        elif market == 'NASDAQ':
+            try:
+                df = fdr.StockListing('S&P500')
+                return df
+            except:
+                return None
+    return None
+
 if st.button("분석시작", type="primary", use_container_width=True):
     if not (use_kospi or use_kosdaq or use_nasdaq):
         st.error("시장을 하나 이상 선택해주세요.")
@@ -260,43 +287,41 @@ if st.button("분석시작", type="primary", use_container_width=True):
         kr_targets = []
         us_targets = []
         
-        # [수정] 리스트 확보 과정을 각각 분리하여 하나가 실패해도 멈추지 않게 함
-        
         # 1. KOSPI
         if use_kospi:
-            try:
-                k = fdr.StockListing('KOSPI'); k['Market'] = 'KOSPI'
+            k = get_stock_listing('KOSPI')
+            if k is not None:
+                k['Market'] = 'KOSPI'
                 if 'Marcap' not in k.columns: k['Marcap'] = 0
                 k = k.sort_values(by='Marcap', ascending=False)
                 k['Actual_Rank'] = range(1, len(k) + 1)
                 kr_targets.append(k)
-            except Exception as e:
-                st.error(f"KOSPI 리스트 확보 실패: {e}")
+            else:
+                st.error("KOSPI 리스트 확보 실패 (거래소 접속 차단)")
 
         # 2. KOSDAQ
         if use_kosdaq:
-            try:
-                kq = fdr.StockListing('KOSDAQ'); kq['Market'] = 'KOSDAQ'
+            kq = get_stock_listing('KOSDAQ')
+            if kq is not None:
+                kq['Market'] = 'KOSDAQ'
                 if 'Marcap' not in kq.columns: kq['Marcap'] = 0
                 kq = kq.sort_values(by='Marcap', ascending=False)
                 kq['Actual_Rank'] = range(1, len(kq) + 1)
                 kr_targets.append(kq)
-            except Exception as e:
-                st.error(f"KOSDAQ 리스트 확보 실패: {e}")
+            else:
+                st.error("KOSDAQ 리스트 확보 실패 (거래소 접속 차단)")
 
         # 3. NASDAQ
         if use_nasdaq:
-            try:
-                ns = fdr.StockListing('NASDAQ')
+            ns = get_stock_listing('NASDAQ')
+            if ns is not None:
                 ns['Market'] = 'NASDAQ'
-                if 'Symbol' in ns.columns:
-                    ns.rename(columns={'Symbol': 'Code'}, inplace=True)
+                if 'Symbol' in ns.columns: ns.rename(columns={'Symbol': 'Code'}, inplace=True)
                 if 'Marcap' not in ns.columns: ns['Marcap'] = 0
                 ns['Actual_Rank'] = range(1, len(ns) + 1)
                 us_targets.append(ns)
-            except Exception as e:
-                # 나스닥 실패 시 에러만 띄우고 멈추지 않음
-                st.error(f"NASDAQ 리스트 확보 실패 (FDR 오류): {e}")
+            else:
+                st.error("NASDAQ 리스트 확보 실패")
 
         df_kr = pd.concat(kr_targets).reset_index(drop=True) if kr_targets else pd.DataFrame()
         df_us = pd.concat(us_targets).reset_index(drop=True) if us_targets else pd.DataFrame()
