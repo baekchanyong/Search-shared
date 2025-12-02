@@ -26,7 +26,6 @@ tab1, tab2, tab3 = st.tabs(["📊 차트/캔들", "📈 이동평균선", "💰 
 
 # [Tab 1] 캔들/패턴
 with tab1:
-    # [수정] 이모지/색상 제거, 기본 스타일로 복귀
     all_c_group1 = st.checkbox("전체선택/해제", value=True, key="g1")
     
     c2 = st.checkbox("2. (월봉) 이번 달 캔들이 양봉(+) 상태인가?", value=all_c_group1)
@@ -161,7 +160,7 @@ def analyze_stock(stock_info):
     if c3 and (curr_week['High'] <= prev_week['High']): return None
     if c4 and (curr_week['Low'] <= prev_week['Low']): return None
 
-    # [추가] RSI 70 이하 조건
+    # RSI 70 이하 조건
     if c_rsi:
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -170,7 +169,6 @@ def analyze_stock(stock_info):
         rsi = 100 - (100 / (1 + rs))
         current_rsi = rsi.iloc[-1]
         
-        # RSI가 계산되지 않거나 70을 초과하면 탈락
         if pd.isna(current_rsi) or current_rsi > 70:
             return None
 
@@ -198,7 +196,7 @@ def analyze_stock(stock_info):
     if c10 and not (c_ma10 > p_ma10): return None
     if c11 and not (c_ma20 > p_ma20): return None
     
-    # [추가] 5일선 전고점 돌파 조건
+    # 5일선 전고점 돌파 조건
     if c_ma5_high:
         lookback = 60
         if len(ma5) > lookback:
@@ -262,22 +260,33 @@ if st.button("분석시작", type="primary", use_container_width=True):
         kr_targets = []
         us_targets = []
         
-        try:
-            if use_kospi:
+        # [수정] 리스트 확보 과정을 각각 분리하여 하나가 실패해도 멈추지 않게 함
+        
+        # 1. KOSPI
+        if use_kospi:
+            try:
                 k = fdr.StockListing('KOSPI'); k['Market'] = 'KOSPI'
                 if 'Marcap' not in k.columns: k['Marcap'] = 0
                 k = k.sort_values(by='Marcap', ascending=False)
                 k['Actual_Rank'] = range(1, len(k) + 1)
                 kr_targets.append(k)
-                
-            if use_kosdaq:
+            except Exception as e:
+                st.error(f"KOSPI 리스트 확보 실패: {e}")
+
+        # 2. KOSDAQ
+        if use_kosdaq:
+            try:
                 kq = fdr.StockListing('KOSDAQ'); kq['Market'] = 'KOSDAQ'
                 if 'Marcap' not in kq.columns: kq['Marcap'] = 0
                 kq = kq.sort_values(by='Marcap', ascending=False)
                 kq['Actual_Rank'] = range(1, len(kq) + 1)
                 kr_targets.append(kq)
-                
-            if use_nasdaq:
+            except Exception as e:
+                st.error(f"KOSDAQ 리스트 확보 실패: {e}")
+
+        # 3. NASDAQ
+        if use_nasdaq:
+            try:
                 ns = fdr.StockListing('NASDAQ')
                 ns['Market'] = 'NASDAQ'
                 if 'Symbol' in ns.columns:
@@ -285,10 +294,9 @@ if st.button("분석시작", type="primary", use_container_width=True):
                 if 'Marcap' not in ns.columns: ns['Marcap'] = 0
                 ns['Actual_Rank'] = range(1, len(ns) + 1)
                 us_targets.append(ns)
-                
-        except Exception as e:
-            st.error(f"종목 리스트 확보 실패: {e}")
-            st.stop()
+            except Exception as e:
+                # 나스닥 실패 시 에러만 띄우고 멈추지 않음
+                st.error(f"NASDAQ 리스트 확보 실패 (FDR 오류): {e}")
 
         df_kr = pd.concat(kr_targets).reset_index(drop=True) if kr_targets else pd.DataFrame()
         df_us = pd.concat(us_targets).reset_index(drop=True) if us_targets else pd.DataFrame()
