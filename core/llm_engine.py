@@ -16,11 +16,18 @@ if not API_KEY:
 
 if API_KEY:
     genai.configure(api_key=API_KEY)
+    
+    try:
+        # 가용한 모델 중 가장 최신 버전의 flash 모델을 자동 선택 (하드코딩으로 인한 404 에러 방지)
+        available_models = [m.name for m in genai.list_models() if 'flash' in m.name and 'generateContent' in m.supported_generation_methods]
+        MODEL_NAME = available_models[-1] if available_models else "models/gemini-flash" # 가장 최신 버전 혹은 기본 별칭 사용
+    except Exception:
+        MODEL_NAME = "models/gemini-flash"
 else:
     print("경고: GEMINI_API_KEY가 설정되지 않았습니다.")
+    MODEL_NAME = "models/gemini-flash"
 
-# 기본 모델 설정
-MODEL_NAME = "gemini-1.5-flash"
+# 모델 설정
 model = genai.GenerativeModel(MODEL_NAME)
 
 SYSTEM_PROMPT = """너는 아주 뛰어나고 창의적인 보드게임 및 MT 게임 디자인 마스터 전문가야. 
