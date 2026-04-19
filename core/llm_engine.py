@@ -54,6 +54,10 @@ def get_chat_response(messages_history):
 
 def stream_chat_response(messages_history):
     """ Streamlit 실시간 타이핑 효과를 위한 Generator 함수 """
+    if not API_KEY:
+        yield "\n[서버 에러: GEMINI_API_KEY가 정상적으로 로드되지 않았습니다. Streamlit Secrets 설정에 키가 제대로 입력되었는지 확인 후 앱을 재부팅(Reboot) 해주세요.]"
+        return
+        
     try:
         system_instruction = {"role": "user", "parts": [SYSTEM_PROMPT + "\n\n이제 이 페르소나에 맞춰 대답해."]}
         history_to_pass = [system_instruction, {"role": "model", "parts": ["네, 알겠습니다. 게임 마스터로서 최선을 다하겠습니다."]}]
@@ -88,6 +92,9 @@ def stream_generate_content(prompt):
 
 def extract_current_rules(messages_history):
     """현재까지의 대화를 바탕으로 실시간 룰 현황 요약 작성"""
+    if not API_KEY:
+        return "[오류: API 키 설정 안 됨]"
+        
     history_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages_history[-10:]]) # 최근 10개 대화만
     prompt = f"""
     아래는 사용자와 게임 마스터 간의 게임 룰 설계 대화입니다:
