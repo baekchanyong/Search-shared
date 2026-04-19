@@ -87,6 +87,27 @@ def stream_generate_content(prompt):
     except Exception as e:
         yield f"\n[서버 통신 오류가 발생했습니다. 잠시 후 시도해주세요]\n상세 에러: {str(e)}"
 
+def extract_current_rules(messages_history):
+    """현재까지의 대화를 바탕으로 실시간 룰 현황 요약 작성"""
+    history_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages_history[-10:]]) # 최근 10개 대화만
+    prompt = f"""
+    아래는 사용자와 게임 마스터 간의 게임 룰 설계 대화입니다:
+    {history_text}
+    
+    이 대화를 바탕으로 지금까지 확정되었거나 논의 중인 게임 룰을 추출해 아래 항목별로 마크다운을 써서 간략히 요약하세요.
+    아직 논의되지 않은 항목은 '미정'이라고 표시하세요. 절대 임의로 상상해서 채우지 마세요.
+    - **플레이어 수**: 
+    - **직업 및 역할**: 
+    - **게임 진행 순서/흐름**: 
+    - **승리 조건**: 
+    - **기타 특수 룰**: 
+    """
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return "상태 업데이트 오류 발생"
+
 def stream_simulation_match(rules_text):
     """실시간 스트리밍으로 1회의 게임 시뮬레이션을 작동시키고 결과를 반환"""
     sim_prompt = f"""
