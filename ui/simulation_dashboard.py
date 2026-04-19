@@ -1,6 +1,6 @@
 import streamlit as st
 import time
-from core.llm_engine import run_simulation_match, analyze_simulation_results
+from core.llm_engine import stream_simulation_match, stream_analyze_simulation_results
 
 def render_simulation_dashboard():
     if "final_rules" not in st.session_state:
@@ -66,18 +66,15 @@ def render_simulation_dashboard():
                 break
                 
             progress_bar.progress((i + 1) / num_games)
-            status_text.text(f"시뮬레이션 진행 중... {i+1}번째 판 진행하며 결과를 도출하는 중입니다. 잠시만 기다려주세요.")
+            status_text.text(f"시뮬레이션 진행 중... {i+1}번째 판 실시간 중계 중입니다. 화면을 확인해주세요!")
             
-            # 실제 LLM 시뮬레이션 호출
-            match_result_text = run_simulation_match(st.session_state.final_rules)
+            # 실제 LLM 시뮬레이션 호출 (실시간 스트리밍)
+            with st.expander(f"🎲 [신규 게임 {i+1}] 실시간 중계 중...", expanded=True):
+                match_result_text = st.write_stream(stream_simulation_match(st.session_state.final_rules))
             
             # 새 세션 로그 및 전역(Session State) 로그에 동시 반영
             current_session_logs += f"### [신규 게임 {i+1} 요약]\n" + match_result_text + "\n\n"
             st.session_state.sim_logs_history += f"### [게임 {i+1} 요약]\n" + match_result_text + "\n\n"
-            
-            # 지난 기록들을 계속 쌓아서 사용자에게 노출
-            with st.expander(f"🎲 [신규 게임 {i+1}] 상세 로그 및 결과 확인", expanded=False):
-                st.markdown(match_result_text)
             
         if not stop_signal:
             progress_bar.progress(1.0)
@@ -87,6 +84,7 @@ def render_simulation_dashboard():
         # 1판 이상 진행되었으면 최종 밸런스 분석 실행
         if current_session_logs != "":
             st.subheader("📈 최신 시뮬레이션 결과 및 밸런스 분석 피드백")
-            with st.spinner("AI가 그동안 진행된 플레이 기록을 분석하여 밸런스 구멍이나 필승법을 찾고 있습니다..."):
-                st.session_state.analysis_feedback = analyze_simulation_results(st.session_state.final_rules, st.session_state.sim_logs_history)
-            st.markdown(st.session_state.analysis_feedback)
+            st.info("AI가 그동안 진행된 플레이 기록을 분석하여 밸런스 구멍이나 필승법을 도출하고 있습니다.")
+            st.session_state.analysis_feedback = st.write_stream(
+                stream_analyze_simulation_results(st.session_state.final_rules, st.session_state.sim_logs_history)
+            )

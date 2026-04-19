@@ -56,8 +56,39 @@ def get_chat_response(messages_history):
     except Exception as e:
         return f"API 호출 에러: {str(e)}"
 
-def run_simulation_match(rules_text):
-    """지정된 룰을 바탕으로 1회의 게임 시뮬레이션을 작동시키고 결과를 반환"""
+def stream_chat_response(messages_history):
+    """ Streamlit 실시간 타이핑 효과를 위한 Generator 함수 """
+    chat_history = []
+    for msg in messages_history:
+        role = "user" if msg["role"] == "user" else "model"
+        chat_history.append({"role": role, "parts": [msg["content"]]})
+        
+    system_instruction = {"role": "user", "parts": [SYSTEM_PROMPT + "\n\n이제 이 페르소나에 맞춰 대답해."]}
+    
+    try:
+        history_to_pass = [system_instruction, {"role": "model", "parts": ["네, 알겠습니다. 게임 마스터로서 최선을 다하겠습니다."]}] + chat_history
+        chat = model.start_chat(history=history_to_pass)
+        
+        # stream=True 를 통해 텍스트를 실시간으로 조각내어 받아옵니다.
+        response = chat.send_message("사용자의 마지막 입력에 대해 룰 디자인 관점에서 답변해줘.", stream=True)
+        for chunk in response:
+            if chunk.text:
+                yield chunk.text
+    except Exception as e:
+        yield f"\n[서버 통신 오류가 발생했습니다. 잠시 후 시도하거나 내용을 줄여주세요]\n상세 에러: {str(e)}"
+
+def stream_generate_content(prompt):
+    """ 규칙 요약 등 단발성 메시지의 실시간 스트리밍을 위한 Generator """
+    try:
+        response = model.generate_content(prompt, stream=True)
+        for chunk in response:
+            if chunk.text:
+                yield chunk.text
+    except Exception as e:
+        yield f"\n[서버 통신 오류가 발생했습니다. 잠시 후 시도해주세요]\n상세 에러: {str(e)}"
+
+def stream_simulation_match(rules_text):
+    """실시간 스트리밍으로 1회의 게임 시뮬레이션을 작동시키고 결과를 반환"""
     sim_prompt = f"""
 너는 뛰어난 보드게임 플레이 인공지능이자 환경 시뮬레이터야.
 주어진 규칙을 완벽하고 엄격하게 지켜서 처음부터 끝까지 1판의 게임을 가상으로 시뮬레이션 해.
@@ -77,13 +108,15 @@ def run_simulation_match(rules_text):
 주요승인: [문장으로 짧게 요약]
 """
     try:
-        response = model.generate_content(sim_prompt)
-        return response.text
+        response = model.generate_content(sim_prompt, stream=True)
+        for chunk in response:
+            if chunk.text:
+                yield chunk.text
     except Exception as e:
-        return f"===결과 요약===\n승리팀: 에러발생\n생존역할: 없음\n주요승인: {str(e)}"
+        yield f"===결과 요약===\n승리팀: 에러발생\n생존역할: 없음\n주요승인: {str(e)}"
 
-def analyze_simulation_results(rules_text, simulation_logs):
-    """여러 판 진행된 시뮬레이션 로그를 바탕으로 룰의 헛점 및 밸런스 패치 조언 생성"""
+def stream_analyze_simulation_results(rules_text, simulation_logs):
+    """여러 판 진행된 시뮬레이션 로그를 바탕으로 실시간 스트리밍 분석"""
     analyze_prompt = f"""
 너는 천재적인 보드게임 밸런스 기획자야.
 아래는 사용자가 만든 게임의 [규칙]과, 이 규칙대로 AI들이 여러번 테스트플레이한 [종합 결과 로그]야.
@@ -100,7 +133,9 @@ def analyze_simulation_results(rules_text, simulation_logs):
 3. 게임을 더 구조적이고 재미있게(혹은 밸런스 있게) 바꾸기 위한 추천 룰 개선안
 """
     try:
-        response = model.generate_content(analyze_prompt)
-        return response.text
+        response = model.generate_content(analyze_prompt, stream=True)
+        for chunk in response:
+            if chunk.text:
+                yield chunk.text
     except Exception as e:
-        return f"분석 중 에러가 발생했습니다: {str(e)}"
+        yield f"분석 중 에러가 발생했습니다: {str(e)}"
